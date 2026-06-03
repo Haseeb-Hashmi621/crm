@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Plus, X, Loader2, DollarSign } from 'lucide-react'
 import api from '../services/api'
+import toast from 'react-hot-toast'
 
 const STAGES = [
   { id: 'new', label: 'New Lead', color: 'border-blue-500', dot: 'bg-blue-500' },
@@ -37,10 +38,12 @@ export default function Deals() {
     setSaving(true)
     try {
       await api.post('/deals/', { ...form, value: parseFloat(form.value) || 0 })
+      toast.success('Deal added!')
       fetchDeals()
       setShowModal(false)
       setForm({ title: '', value: '', stage: 'new', contact_name: '', company: '' })
     } catch (err) {
+      toast.error('Something went wrong')
       console.error(err)
     } finally {
       setSaving(false)
@@ -53,6 +56,17 @@ export default function Deals() {
       setDeals(prev => prev.map(d => d.id === dealId ? { ...d, stage } : d))
     } catch (err) {
       console.error(err)
+    }
+  }
+
+  const handleDeleteDeal = async (dealId) => {
+    if (!confirm('Delete this deal?')) return
+    try {
+      await api.delete(`/deals/${dealId}`)
+      toast.success('Deal deleted!')
+      fetchDeals()
+    } catch (err) {
+      toast.error('Something went wrong')
     }
   }
 
@@ -130,7 +144,16 @@ export default function Deals() {
                           onDragEnd={() => setDragging(null)}
                           className="bg-gray-900 border border-gray-800 rounded-xl p-4 cursor-grab active:cursor-grabbing hover:border-gray-700 transition-colors"
                         >
-                          <p className="text-white text-sm font-medium mb-2">{deal.title}</p>
+                          <div className="flex items-center justify-between mb-2">
+                            <p className="text-white text-sm font-medium">{deal.title}</p>
+                            <motion.button
+                              whileHover={{ scale: 1.1 }}
+                              onClick={() => handleDeleteDeal(deal.id)}
+                              className="text-gray-600 hover:text-red-400 transition-colors"
+                            >
+                              <X className="w-3 h-3" />
+                            </motion.button>
+                          </div>
                           {deal.contact_name && (
                             <p className="text-gray-500 text-xs mb-1">{deal.contact_name}</p>
                           )}

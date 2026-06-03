@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Users, Plus, Search, Trash2, Edit2, X, Loader2 } from 'lucide-react'
 import api from '../services/api'
+import toast from 'react-hot-toast'
 
 export default function Contacts() {
   const [contacts, setContacts] = useState([])
@@ -44,12 +45,15 @@ export default function Contacts() {
     try {
       if (editContact) {
         await api.put(`/contacts/${editContact.id}`, form)
+        toast.success('Contact updated!')
       } else {
         await api.post('/contacts/', form)
+        toast.success('Contact added!')
       }
       fetchContacts()
       setShowModal(false)
     } catch (err) {
+      toast.error('Something went wrong')
       console.error(err)
     } finally {
       setSaving(false)
@@ -59,6 +63,7 @@ export default function Contacts() {
   const handleDelete = async (id) => {
     if (!confirm('Delete this contact?')) return
     await api.delete(`/contacts/${id}`)
+    toast.success('Contact deleted!')
     fetchContacts()
   }
 
