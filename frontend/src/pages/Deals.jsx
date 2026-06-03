@@ -59,13 +59,17 @@ export default function Deals() {
   const totalValue = deals.filter(d => d.stage === 'won').reduce((sum, d) => sum + d.value, 0)
 
   return (
-    <div className="p-8 overflow-x-auto">
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+    <div style={{ padding: '2rem', boxSizing: 'border-box', height: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}
+      >
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold text-white">Pipeline</h1>
             <p className="text-gray-400 mt-1">
-              {deals.length} deals · 
+              {deals.length} deals ·
               <span className="text-green-400 ml-1">${totalValue.toLocaleString()} won</span>
             </p>
           </div>
@@ -85,14 +89,14 @@ export default function Deals() {
             <Loader2 className="w-8 h-8 text-violet-500 animate-spin" />
           </div>
         ) : (
-          <div className="flex gap-4 overflow-x-auto pb-4">
+          <div style={{ display: 'flex', gap: '1rem', overflowX: 'auto', overflowY: 'auto', flex: 1, paddingBottom: '1rem' }}>
             {STAGES.map((stage) => {
               const stageDeals = deals.filter(d => d.stage === stage.id)
               const stageValue = stageDeals.reduce((sum, d) => sum + d.value, 0)
               return (
                 <div
                   key={stage.id}
-                  className="flex-shrink-0 w-64"
+                  style={{ flexShrink: 0, width: '240px' }}
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => {
                     e.preventDefault()
@@ -112,7 +116,7 @@ export default function Deals() {
                     )}
                   </div>
 
-                  <div className="space-y-3 min-h-32">
+                  <div style={{ minHeight: '8rem' }} className="space-y-3">
                     <AnimatePresence>
                       {stageDeals.map((deal) => (
                         <motion.div
@@ -175,7 +179,7 @@ export default function Deals() {
 
               <div className="space-y-4">
                 {[
-                  { key: 'title', label: 'Deal Title', required: true },
+                  { key: 'title', label: 'Deal Title' },
                   { key: 'value', label: 'Value ($)' },
                   { key: 'contact_name', label: 'Contact Name' },
                   { key: 'company', label: 'Company' },

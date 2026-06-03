@@ -22,12 +22,11 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-gray-950 flex">
-      {/* Sidebar */}
       <motion.div
         initial={{ x: -250 }}
         animate={{ x: 0 }}
         transition={{ duration: 0.4 }}
-        className="w-64 bg-gray-900 border-r border-gray-800 flex flex-col fixed h-full"
+        className="w-64 bg-gray-900 border-r border-gray-800 flex flex-col fixed h-full z-10"
       >
         <div className="p-6 border-b border-gray-800">
           <div className="flex items-center gap-3">
@@ -37,7 +36,6 @@ export default function Dashboard() {
             <span className="text-white font-semibold text-lg">CRM</span>
           </div>
         </div>
-
         <nav className="flex-1 p-4 space-y-1">
           {navItems.map((item) => (
             <motion.button
@@ -55,7 +53,6 @@ export default function Dashboard() {
             </motion.button>
           ))}
         </nav>
-
         <div className="p-4 border-t border-gray-800">
           <motion.button
             whileHover={{ x: 4 }}
@@ -67,9 +64,7 @@ export default function Dashboard() {
           </motion.button>
         </div>
       </motion.div>
-
-      {/* Main content */}
-      <div className="flex-1 ml-64">
+      <div style={{ marginLeft: '256px', flex: 1, minWidth: 0 }}>
         <Outlet />
       </div>
     </div>
