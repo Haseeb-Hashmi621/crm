@@ -59,7 +59,7 @@ export default function Deals() {
   const totalValue = deals.filter(d => d.stage === 'won').reduce((sum, d) => sum + d.value, 0)
 
   return (
-    <div className="p-8">
+    <div className="p-8 overflow-x-auto">
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
         <div className="flex items-center justify-between mb-6">
           <div>

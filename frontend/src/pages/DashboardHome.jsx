@@ -1,14 +1,40 @@
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Users, TrendingUp, DollarSign, Activity } from 'lucide-react'
-
-const stats = [
-  { label: 'Total Contacts', value: '0', icon: Users, color: 'bg-violet-500' },
-  { label: 'Active Deals', value: '0', icon: TrendingUp, color: 'bg-blue-500' },
-  { label: 'Revenue', value: '$0', icon: DollarSign, color: 'bg-green-500' },
-  { label: 'Activities', value: '0', icon: Activity, color: 'bg-orange-500' },
-]
+import api from '../services/api'
 
 export default function DashboardHome() {
+  const [stats, setStats] = useState({ contacts: 0, deals: 0, won: 0 })
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const [contacts, deals] = await Promise.all([
+          api.get('/contacts/'),
+          api.get('/deals/')
+        ])
+        const wonValue = deals.data
+          .filter(d => d.stage === 'won')
+          .reduce((sum, d) => sum + d.value, 0)
+        setStats({
+          contacts: contacts.data.length,
+          deals: deals.data.length,
+          won: wonValue
+        })
+      } catch (err) {
+        console.error(err)
+      }
+    }
+    fetchStats()
+  }, [])
+
+  const statCards = [
+    { label: 'Total Contacts', value: stats.contacts, icon: Users, color: 'bg-violet-500' },
+    { label: 'Active Deals', value: stats.deals, icon: TrendingUp, color: 'bg-blue-500' },
+    { label: 'Revenue Won', value: `$${stats.won.toLocaleString()}`, icon: DollarSign, color: 'bg-green-500' },
+    { label: 'Activities', value: 0, icon: Activity, color: 'bg-orange-500' },
+  ]
+
   return (
     <div className="p-8">
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
@@ -16,7 +42,7 @@ export default function DashboardHome() {
         <p className="text-gray-400 mb-8">Welcome to your CRM</p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {stats.map((stat, i) => (
+          {statCards.map((stat, i) => (
             <motion.div
               key={stat.label}
               initial={{ opacity: 0, y: 20 }}
