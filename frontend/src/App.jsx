@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard'
 import DashboardHome from './pages/DashboardHome'
 import Contacts from './pages/Contacts'
 import Deals from './pages/Deals'
+import Revenue from './pages/Revenue'
 import useAuthStore from './store/authStore'
 
 function ProtectedRoute({ children }) {
@@ -22,6 +23,7 @@ function App() {
           <Route index element={<DashboardHome />} />
           <Route path="contacts" element={<Contacts />} />
           <Route path="deals" element={<Deals />} />
+          <Route path="revenue" element={<Revenue />} />
         </Route>
         <Route path="/" element={<Navigate to="/login" />} />
       </Routes>
