@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
-import { Users, TrendingUp, DollarSign, Activity, LogOut } from 'lucide-react'
+import { Users, TrendingUp, DollarSign, Activity, LogOut, Sun, Moon, Monitor } from 'lucide-react'
 import useAuthStore from '../store/authStore'
+import useThemeStore from '../store/themeStore'
 import { useNavigate, useLocation, Outlet } from 'react-router-dom'
 
 const navItems = [
@@ -12,6 +13,7 @@ const navItems = [
 
 export default function Dashboard() {
   const { logout } = useAuthStore()
+  const { theme, setTheme } = useThemeStore()
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -19,6 +21,12 @@ export default function Dashboard() {
     logout()
     navigate('/login')
   }
+
+  const themes = [
+    { id: 'light', icon: Sun, label: 'Light' },
+    { id: 'dark', icon: Moon, label: 'Dark' },
+    { id: 'system', icon: Monitor, label: 'System' },
+  ]
 
   return (
     <div className="min-h-screen bg-gray-950 flex">
@@ -36,6 +44,7 @@ export default function Dashboard() {
             <span className="text-white font-semibold text-lg">CRM</span>
           </div>
         </div>
+
         <nav className="flex-1 p-4 space-y-1">
           {navItems.map((item) => (
             <motion.button
@@ -53,6 +62,29 @@ export default function Dashboard() {
             </motion.button>
           ))}
         </nav>
+
+        {/* Theme switcher */}
+        <div className="px-4 pb-4">
+          <p className="text-gray-600 text-xs uppercase font-medium mb-2 px-1">Theme</p>
+          <div className="flex gap-1 bg-gray-800 rounded-xl p-1">
+            {themes.map((t) => (
+              <motion.button
+                key={t.id}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setTheme(t.id)}
+                className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-xs transition-colors ${
+                  theme === t.id
+                    ? 'bg-violet-600 text-white'
+                    : 'text-gray-500 hover:text-gray-300'
+                }`}
+              >
+                <t.icon className="w-3 h-3" />
+                {t.label}
+              </motion.button>
+            ))}
+          </div>
+        </div>
+
         <div className="p-4 border-t border-gray-800">
           <motion.button
             whileHover={{ x: 4 }}
@@ -64,6 +96,7 @@ export default function Dashboard() {
           </motion.button>
         </div>
       </motion.div>
+
       <div style={{ marginLeft: '256px', flex: 1, minWidth: 0 }}>
         <Outlet />
       </div>
