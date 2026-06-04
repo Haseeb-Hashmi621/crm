@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Users, Plus, Search, Trash2, Edit2, X, Loader2 } from 'lucide-react'
+import { Users, Plus, Search, Trash2, Edit2, X, Loader2, ChevronRight } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import api from '../services/api'
 import toast from 'react-hot-toast'
 
@@ -12,6 +13,7 @@ export default function Contacts() {
   const [editContact, setEditContact] = useState(null)
   const [form, setForm] = useState({ first_name: '', last_name: '', email: '', phone: '', company: '' })
   const [saving, setSaving] = useState(false)
+  const navigate = useNavigate()
 
   useEffect(() => {
     fetchContacts()
@@ -34,9 +36,16 @@ export default function Contacts() {
     setShowModal(true)
   }
 
-  const openEdit = (contact) => {
+  const openEdit = (e, contact) => {
+    e.stopPropagation()
     setEditContact(contact)
-    setForm({ first_name: contact.first_name, last_name: contact.last_name || '', email: contact.email || '', phone: contact.phone || '', company: contact.company || '' })
+    setForm({
+      first_name: contact.first_name,
+      last_name: contact.last_name || '',
+      email: contact.email || '',
+      phone: contact.phone || '',
+      company: contact.company || ''
+    })
     setShowModal(true)
   }
 
@@ -60,7 +69,8 @@ export default function Contacts() {
     }
   }
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (e, id) => {
+    e.stopPropagation()
     if (!confirm('Delete this contact?')) return
     await api.delete(`/contacts/${id}`)
     toast.success('Contact deleted!')
@@ -132,14 +142,16 @@ export default function Contacts() {
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
                       transition={{ delay: i * 0.05 }}
-                      className="border-b border-gray-800 hover:bg-gray-800/50 transition-colors"
+                      onClick={() => navigate(`/dashboard/contacts/${contact.id}`)}
+                      className="border-b border-gray-800 hover:bg-gray-800/50 transition-colors cursor-pointer group"
                     >
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 bg-violet-600 rounded-full flex items-center justify-center text-white text-xs font-bold">
-                            {contact.first_name[0]}{contact.last_name?.[0] || ''}
+                          <div className="w-8 h-8 bg-violet-600 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                            {contact.first_name?.[0]}{contact.last_name?.[0] || ''}
                           </div>
                           <span className="text-white text-sm">{contact.first_name} {contact.last_name}</span>
+                          <ChevronRight className="w-3.5 h-3.5 text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity -ml-1" />
                         </div>
                       </td>
                       <td className="px-6 py-4 text-gray-400 text-sm">{contact.email || '-'}</td>
@@ -149,14 +161,14 @@ export default function Contacts() {
                         <div className="flex items-center justify-end gap-2">
                           <motion.button
                             whileHover={{ scale: 1.1 }}
-                            onClick={() => openEdit(contact)}
+                            onClick={(e) => openEdit(e, contact)}
                             className="p-1.5 text-gray-500 hover:text-violet-400 transition-colors"
                           >
                             <Edit2 className="w-4 h-4" />
                           </motion.button>
                           <motion.button
                             whileHover={{ scale: 1.1 }}
-                            onClick={() => handleDelete(contact.id)}
+                            onClick={(e) => handleDelete(e, contact.id)}
                             className="p-1.5 text-gray-500 hover:text-red-400 transition-colors"
                           >
                             <Trash2 className="w-4 h-4" />

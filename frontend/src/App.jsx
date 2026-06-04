@@ -4,8 +4,10 @@ import Signup from './pages/Signup'
 import Dashboard from './pages/Dashboard'
 import DashboardHome from './pages/DashboardHome'
 import Contacts from './pages/Contacts'
+import ContactDetail from './pages/ContactDetail'
 import Deals from './pages/Deals'
 import Revenue from './pages/Revenue'
+import Settings from './pages/Settings'
 import useAuthStore from './store/authStore'
 
 function ProtectedRoute({ children }) {
@@ -22,8 +24,10 @@ function App() {
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>}>
           <Route index element={<DashboardHome />} />
           <Route path="contacts" element={<Contacts />} />
+          <Route path="contacts/:id" element={<ContactDetail />} />
           <Route path="deals" element={<Deals />} />
           <Route path="revenue" element={<Revenue />} />
+          <Route path="settings" element={<Settings />} />
         </Route>
         <Route path="/" element={<Navigate to="/login" />} />
       </Routes>
