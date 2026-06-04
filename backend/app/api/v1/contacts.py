@@ -18,7 +18,7 @@ def list_contacts(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    return get_contacts(db, skip, limit)
+    return get_contacts(db, current_user.id, skip, limit)
 
 @router.post("/", response_model=ContactResponse)
 def add_contact(
@@ -26,7 +26,7 @@ def add_contact(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    return create_contact(db, contact_data)
+    return create_contact(db, contact_data, current_user.id)
 
 @router.get("/{contact_id}", response_model=ContactResponse)
 def get_one_contact(
@@ -34,7 +34,7 @@ def get_one_contact(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    contact = get_contact(db, contact_id)
+    contact = get_contact(db, contact_id, current_user.id)
     if not contact:
         raise HTTPException(status_code=404, detail="Contact not found")
     return contact
@@ -46,7 +46,7 @@ def edit_contact(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    contact = update_contact(db, contact_id, contact_data)
+    contact = update_contact(db, contact_id, contact_data, current_user.id)
     if not contact:
         raise HTTPException(status_code=404, detail="Contact not found")
     return contact
@@ -57,7 +57,7 @@ def remove_contact(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    success = delete_contact(db, contact_id)
+    success = delete_contact(db, contact_id, current_user.id)
     if not success:
         raise HTTPException(status_code=404, detail="Contact not found")
     return {"message": "Contact deleted successfully"}

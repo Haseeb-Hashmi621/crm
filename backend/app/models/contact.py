@@ -1,10 +1,6 @@
 import uuid
 
-from sqlalchemy import Column
-from sqlalchemy import String
-from sqlalchemy import DateTime
-from sqlalchemy import ForeignKey
-
+from sqlalchemy import Column, String, DateTime, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 
@@ -21,14 +17,16 @@ class Contact(Base):
     )
 
     first_name = Column(String)
-
     last_name = Column(String)
-
     email = Column(String)
-
     phone = Column(String)
-
     company = Column(String)
+
+    user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False
+    )
 
     workspace_id = Column(
         UUID(as_uuid=True),
