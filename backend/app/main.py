@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.auth import router as auth_router
 from app.api.v1.contacts import router as contacts_router
 from app.api.v1.deals import router as deals_router
+from app.api.v1.activities import router as activities_router
 
 app = FastAPI(
     title="CRM API",
@@ -21,6 +22,7 @@ app.add_middleware(
 app.include_router(auth_router, prefix="/auth", tags=["Authentication"])
 app.include_router(contacts_router, prefix="/contacts", tags=["Contacts"])
 app.include_router(deals_router, prefix="/deals", tags=["Deals"])
+app.include_router(activities_router, prefix="/activities", tags=["Activities"])
 
 @app.get("/")
 def root():
