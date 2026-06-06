@@ -1,6 +1,7 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from uuid import UUID
+from app.schemas.tag import TagResponse
 
 class ContactCreate(BaseModel):
     first_name: str
@@ -23,6 +24,7 @@ class ContactResponse(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     company: Optional[str] = None
+    tags: List[TagResponse] = []
 
     class Config:
         from_attributes = True

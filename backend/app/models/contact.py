@@ -20,13 +20,7 @@ class Contact(Base):
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False
     )
-    workspace_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("workspaces.id")
-    )
-    created_at = Column(
-        DateTime(timezone=True),
-        server_default=func.now()
-    )
+    workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id"))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     tags = relationship("Tag", secondary=contact_tags, lazy="select")

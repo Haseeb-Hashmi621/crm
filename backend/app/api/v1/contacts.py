@@ -3,11 +3,17 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+import csv
+import io
+
 from app.schemas.contact import ContactCreate, ContactUpdate, ContactResponse
 from app.services.contact_service import (
     get_contacts, get_contact, create_contact, update_contact, delete_contact
 )
 from typing import List
+
+
 
 router = APIRouter()
 
@@ -39,3 +45,49 @@ def remove_contact(contact_id: str, db: Session = Depends(get_db), current_user:
     if not success:
         raise HTTPException(status_code=404, detail="Contact not found")
     return {"message": "Contact deleted successfully"}
+
+@router.post("/import")
+async def import_contacts(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="Only CSV files are allowed")
+    
+    contents = await file.read()
+    decoded = contents.decode('utf-8-sig')  # utf-8-sig handles Excel BOM
+    reader = csv.DictReader(io.StringIO(decoded))
+    
+    imported = 0
+    skipped = 0
+    errors = []
+    
+    for i, row in enumerate(reader, start=2):  # start=2 because row 1 is header
+        first_name = row.get('first_name', '').strip()
+        if not first_name:
+            skipped += 1
+            continue
+        
+        try:
+            from app.models.contact import Contact
+            db_contact = Contact(
+                first_name=first_name,
+                last_name=row.get('last_name', '').strip() or None,
+                email=row.get('email', '').strip() or None,
+                phone=row.get('phone', '').strip() or None,
+                company=row.get('company', '').strip() or None,
+                user_id=current_user.id
+            )
+            db.add(db_contact)
+            imported += 1
+        except Exception as e:
+            errors.append(f"Row {i}: {str(e)}")
+    
+    db.commit()
+    
+    return {
+        "imported": imported,
+        "skipped": skipped,
+        "errors": errors
+    }

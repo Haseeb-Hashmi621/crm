@@ -27,6 +27,7 @@ app.include_router(deals_router, prefix="/deals", tags=["Deals"])
 app.include_router(activities_router, prefix="/activities", tags=["Activities"])
 app.include_router(campaigns_router, prefix="/campaigns", tags=["Campaigns"])
 app.include_router(tags_router, prefix="/tags", tags=["Tags"])
+
 @app.get("/")
 def root():
     return {"message": "CRM API is running!"}
