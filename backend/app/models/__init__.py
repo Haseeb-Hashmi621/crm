@@ -3,3 +3,5 @@ from .workspace import Workspace
 from .contact import Contact
 from .tag import Tag
 from .deal import Deal
+from .activity import Activity
+from .campaign import Campaign, CampaignRecipient
