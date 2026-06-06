@@ -1,4 +1,4 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.models.tag import Tag
 from app.models.contact import Contact
 from app.schemas.tag import TagCreate
@@ -8,7 +8,6 @@ def get_tags(db: Session, user_id: str) -> List[Tag]:
     return db.query(Tag).filter(Tag.user_id == user_id).all()
 
 def create_tag(db: Session, data: TagCreate, user_id: str) -> Tag:
-    # Don't create duplicate tag names for same user
     existing = db.query(Tag).filter(
         Tag.user_id == user_id,
         Tag.name == data.name.strip()
@@ -30,7 +29,7 @@ def delete_tag(db: Session, tag_id: str, user_id: str) -> bool:
     return True
 
 def add_tag_to_contact(db: Session, contact_id: str, tag_id: str, user_id: str) -> Optional[Contact]:
-    contact = db.query(Contact).filter(
+    contact = db.query(Contact).options(joinedload(Contact.tags)).filter(
         Contact.id == contact_id,
         Contact.user_id == user_id
     ).first()
@@ -40,11 +39,10 @@ def add_tag_to_contact(db: Session, contact_id: str, tag_id: str, user_id: str) 
     if tag not in contact.tags:
         contact.tags.append(tag)
         db.commit()
-        db.refresh(contact)
-    return contact
+    return db.query(Contact).options(joinedload(Contact.tags)).filter(Contact.id == contact_id).first()
 
 def remove_tag_from_contact(db: Session, contact_id: str, tag_id: str, user_id: str) -> Optional[Contact]:
-    contact = db.query(Contact).filter(
+    contact = db.query(Contact).options(joinedload(Contact.tags)).filter(
         Contact.id == contact_id,
         Contact.user_id == user_id
     ).first()
@@ -54,5 +52,7 @@ def remove_tag_from_contact(db: Session, contact_id: str, tag_id: str, user_id: 
     if tag in contact.tags:
         contact.tags.remove(tag)
         db.commit()
-        db.refresh(contact)
-    return contact
+    return db.query(Contact).options(joinedload(Contact.tags)).filter(Contact.id == contact_id).first()
+
+def get_sms_recipients(db: Session, campaign_id: str):
+    pass

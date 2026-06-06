@@ -1,16 +1,21 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.models.contact import Contact
 from app.schemas.contact import ContactCreate, ContactUpdate
 from typing import List, Optional
-import uuid
 
-def get_contacts(db: Session, user_id: uuid.UUID, skip: int = 0, limit: int = 100) -> List[Contact]:
-    return db.query(Contact).filter(Contact.user_id == user_id).offset(skip).limit(limit).all()
+def get_contacts(db: Session, skip: int = 0, limit: int = 100, user_id: str = None) -> List[Contact]:
+    query = db.query(Contact).options(joinedload(Contact.tags))
+    if user_id:
+        query = query.filter(Contact.user_id == user_id)
+    return query.offset(skip).limit(limit).all()
 
-def get_contact(db: Session, contact_id: str, user_id: uuid.UUID) -> Optional[Contact]:
-    return db.query(Contact).filter(Contact.id == contact_id, Contact.user_id == user_id).first()
+def get_contact(db: Session, contact_id: str, user_id: str = None) -> Optional[Contact]:
+    query = db.query(Contact).options(joinedload(Contact.tags)).filter(Contact.id == contact_id)
+    if user_id:
+        query = query.filter(Contact.user_id == user_id)
+    return query.first()
 
-def create_contact(db: Session, contact_data: ContactCreate, user_id: uuid.UUID) -> Contact:
+def create_contact(db: Session, contact_data: ContactCreate, user_id: str) -> Contact:
     db_contact = Contact(
         first_name=contact_data.first_name,
         last_name=contact_data.last_name,
@@ -24,17 +29,16 @@ def create_contact(db: Session, contact_data: ContactCreate, user_id: uuid.UUID)
     db.refresh(db_contact)
     return db_contact
 
-def update_contact(db: Session, contact_id: str, contact_data: ContactUpdate, user_id: uuid.UUID) -> Optional[Contact]:
+def update_contact(db: Session, contact_id: str, contact_data: ContactUpdate, user_id: str = None) -> Optional[Contact]:
     contact = get_contact(db, contact_id, user_id)
     if not contact:
         return None
     for key, value in contact_data.model_dump(exclude_unset=True).items():
         setattr(contact, key, value)
     db.commit()
-    db.refresh(contact)
-    return contact
+    return get_contact(db, contact_id, user_id)
 
-def delete_contact(db: Session, contact_id: str, user_id: uuid.UUID) -> bool:
+def delete_contact(db: Session, contact_id: str, user_id: str = None) -> bool:
     contact = get_contact(db, contact_id, user_id)
     if not contact:
         return False

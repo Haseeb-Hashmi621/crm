@@ -29,4 +29,4 @@ class Contact(Base):
         server_default=func.now()
     )
 
-    tags = relationship("Tag", secondary=contact_tags, backref="contacts", lazy="joined")
+    tags = relationship("Tag", secondary=contact_tags, lazy="select")

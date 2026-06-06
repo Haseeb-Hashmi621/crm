@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Users, Plus, Search, Trash2, Edit2, X, Loader2, Tag } from 'lucide-react'
+import { Users, Plus, Search, Trash2, Edit2, X, Loader2, Tag, ChevronRight } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import api from '../services/api'
 import toast from 'react-hot-toast'
 
@@ -31,6 +32,7 @@ export default function Contacts() {
   const [saving, setSaving] = useState(false)
   const [showTagModal, setShowTagModal] = useState(null)
   const [newTagName, setNewTagName] = useState('')
+  const navigate = useNavigate()
 
   useEffect(() => {
     fetchContacts()
@@ -63,7 +65,8 @@ export default function Contacts() {
     setShowModal(true)
   }
 
-  const openEdit = (contact) => {
+  const openEdit = (e, contact) => {
+    e.stopPropagation()
     setEditContact(contact)
     setForm({
       first_name: contact.first_name,
@@ -94,7 +97,8 @@ export default function Contacts() {
     }
   }
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (e, id) => {
+    e.stopPropagation()
     if (!confirm('Delete this contact?')) return
     await api.delete(`/contacts/${id}`)
     toast.success('Contact deleted!')
@@ -123,7 +127,8 @@ export default function Contacts() {
     }
   }
 
-  const handleRemoveTagFromContact = async (contactId, tagId) => {
+  const handleRemoveTagFromContact = async (e, contactId, tagId) => {
+    e.stopPropagation()
     try {
       await api.delete(`/tags/contacts/${contactId}/remove/${tagId}`)
       fetchContacts()
@@ -192,7 +197,7 @@ export default function Contacts() {
                 className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
                   selectedTag === tag.id
                     ? 'bg-violet-600 text-white border-violet-600'
-                    : `${getTagColor(tag.name)} border`
+                    : `${getTagColor(tag.name)} hover:opacity-80`
                 }`}
               >
                 {tag.name}
@@ -205,6 +210,8 @@ export default function Contacts() {
               </button>
             </div>
           ))}
+
+          {/* Create new tag inline */}
           <div className="flex items-center gap-1 ml-2">
             <input
               type="text"
@@ -212,17 +219,18 @@ export default function Contacts() {
               onChange={e => setNewTagName(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleCreateTag()}
               placeholder="New tag..."
-              className="bg-gray-900 border border-gray-700 text-white rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-violet-500 w-28"
+              className="bg-gray-800 border border-gray-700 text-white rounded-full px-3 py-1 text-xs focus:outline-none focus:border-violet-500 w-24 transition-colors"
             />
             <button
               onClick={handleCreateTag}
-              className="text-xs px-2 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white rounded-lg transition-colors"
+              className="text-xs px-2 py-1 rounded-full bg-gray-800 border border-gray-700 text-gray-400 hover:text-white transition-colors"
             >
               <Plus className="w-3 h-3" />
             </button>
           </div>
         </div>
 
+        {/* Search */}
         <div className="relative mb-6">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 w-4 h-4" />
           <input
@@ -242,6 +250,7 @@ export default function Contacts() {
           <div className="text-center py-20">
             <Users className="w-12 h-12 mx-auto mb-3 text-gray-700" />
             <p className="text-gray-500">No contacts found</p>
+            <p className="text-gray-600 text-sm mt-1">Add your first contact to get started</p>
           </div>
         ) : (
           <div className="bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden">
@@ -264,14 +273,16 @@ export default function Contacts() {
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
                       transition={{ delay: i * 0.03 }}
-                      className="border-b border-gray-800 hover:bg-gray-800/50 transition-colors"
+                      onClick={() => navigate(`/dashboard/contacts/${contact.id}`)}
+                      className="border-b border-gray-800 hover:bg-gray-800/50 transition-colors cursor-pointer group"
                     >
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 bg-violet-600 rounded-full flex items-center justify-center text-white text-xs font-bold">
-                            {contact.first_name[0]}{contact.last_name?.[0] || ''}
+                          <div className="w-8 h-8 bg-violet-600 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                            {contact.first_name?.[0]}{contact.last_name?.[0] || ''}
                           </div>
                           <span className="text-white text-sm">{contact.first_name} {contact.last_name}</span>
+                          <ChevronRight className="w-3.5 h-3.5 text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity" />
                         </div>
                       </td>
                       <td className="px-6 py-4 text-gray-400 text-sm">{contact.email || '-'}</td>
@@ -282,14 +293,14 @@ export default function Contacts() {
                             <span
                               key={tag.id}
                               className={`text-xs px-2 py-0.5 rounded-full border ${getTagColor(tag.name)} cursor-pointer`}
-                              onClick={() => handleRemoveTagFromContact(contact.id, tag.id)}
+                              onClick={(e) => handleRemoveTagFromContact(e, contact.id, tag.id)}
                               title="Click to remove"
                             >
                               {tag.name}
                             </span>
                           ))}
                           <button
-                            onClick={() => setShowTagModal(contact.id)}
+                            onClick={(e) => { e.stopPropagation(); setShowTagModal(contact.id) }}
                             className="text-xs px-2 py-0.5 rounded-full border border-dashed border-gray-600 text-gray-500 hover:text-violet-400 hover:border-violet-500 transition-colors"
                           >
                             + tag
@@ -300,14 +311,14 @@ export default function Contacts() {
                         <div className="flex items-center justify-end gap-2">
                           <motion.button
                             whileHover={{ scale: 1.1 }}
-                            onClick={() => openEdit(contact)}
+                            onClick={(e) => openEdit(e, contact)}
                             className="p-1.5 text-gray-500 hover:text-violet-400 transition-colors"
                           >
                             <Edit2 className="w-4 h-4" />
                           </motion.button>
                           <motion.button
                             whileHover={{ scale: 1.1 }}
-                            onClick={() => handleDelete(contact.id)}
+                            onClick={(e) => handleDelete(e, contact.id)}
                             className="p-1.5 text-gray-500 hover:text-red-400 transition-colors"
                           >
                             <Trash2 className="w-4 h-4" />
