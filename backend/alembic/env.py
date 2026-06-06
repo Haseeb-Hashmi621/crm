@@ -11,11 +11,12 @@ load_dotenv()
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.core.database import Base
-from app.models import user, workspace, contact, tag
+from app.models import user, workspace, contact, tag, deal
+from app.models.activity import Activity
+from app.models.tag import contact_tags
 
 config = context.config
 
-# Override sqlalchemy.url from environment
 config.set_main_option("sqlalchemy.url", os.environ.get("DATABASE_URL"))
 
 if config.config_file_name is not None:
