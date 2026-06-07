@@ -2,6 +2,8 @@ import { motion } from 'framer-motion'
 import { Users, TrendingUp, DollarSign, Activity, LogOut, Settings, Mail } from 'lucide-react'
 import useAuthStore from '../store/authStore'
 import { useNavigate, useLocation, Outlet } from 'react-router-dom'
+import GlobalSearch from '../components/GlobalSearch'
+
 
 const navItems = [
   { label: 'Dashboard', icon: Activity, path: '/dashboard' },
@@ -46,6 +48,7 @@ export default function Dashboard() {
         </div>
 
         <nav className="flex-1 p-4 space-y-1">
+          <GlobalSearch />
           {navItems.map((item) => (
             <motion.button
               key={item.label}
