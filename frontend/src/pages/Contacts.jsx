@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Users, Plus, Search, Trash2, Edit2, X, Loader2, Tag, ChevronRight, Check, Upload } from 'lucide-react'
+import { Users, Plus, Search, Trash2, Edit2, X, Loader2, Tag, ChevronRight, Check, Upload, Download } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import api from '../services/api'
 import toast from 'react-hot-toast'
@@ -76,7 +76,7 @@ function TagDropdown({ contact, allTags, onTagAdded, onTagRemoved, onClose }) {
     try {
       const { data: tag } = await api.post('/tags/', { name })
       await api.post(`/tags/contacts/${contact.id}/add/${tag.id}`)
-      onTagAdded(contact.id, tag, true) // true = newly created tag
+      onTagAdded(contact.id, tag, true)
       setNewTagName('')
     } catch (err) {
       toast.error('Failed to create tag')
@@ -153,12 +153,13 @@ export default function Contacts() {
   const [allTags, setAllTags] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [filterTag, setFilterTag] = useState(null) // tag id or null
+  const [filterTag, setFilterTag] = useState(null)
   const [showModal, setShowModal] = useState(false)
   const [editContact, setEditContact] = useState(null)
   const [form, setForm] = useState({ first_name: '', last_name: '', email: '', phone: '', company: '' })
   const [saving, setSaving] = useState(false)
-  const [openDropdown, setOpenDropdown] = useState(null) // contact id
+  const [openDropdown, setOpenDropdown] = useState(null)
+  const [exporting, setExporting] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -227,8 +228,33 @@ export default function Contacts() {
       toast.error(err.response?.data?.detail || 'Import failed')
     }
 
-    // Reset input so same file can be re-uploaded
     e.target.value = ''
+  }
+
+  const handleCSVExport = async () => {
+    setExporting(true)
+    try {
+      const token = localStorage.getItem('token')
+      const res = await fetch('http://127.0.0.1:8000/contacts/export', {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      if (!res.ok) throw new Error('Export failed')
+      const blob = await res.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'contacts.csv'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+      toast.success('Contacts exported!')
+    } catch (err) {
+      toast.error('Export failed')
+      console.error(err)
+    } finally {
+      setExporting(false)
+    }
   }
 
   const openAdd = () => {
@@ -302,6 +328,19 @@ export default function Contacts() {
             <p className="text-gray-400 mt-1">{contacts.length} total contacts</p>
           </div>
           <div className="flex items-center gap-3">
+            {/* Export CSV */}
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={handleCSVExport}
+              disabled={exporting}
+              className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 hover:text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
+            >
+              {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              {exporting ? 'Exporting...' : 'Export CSV'}
+            </motion.button>
+
+            {/* Import CSV */}
             <label className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 hover:text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-colors cursor-pointer">
               <Upload className="w-4 h-4" />
               Import CSV
@@ -312,6 +351,8 @@ export default function Contacts() {
                 onChange={handleCSVImport}
               />
             </label>
+
+            {/* Add Contact */}
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}

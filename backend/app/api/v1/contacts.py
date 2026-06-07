@@ -1,21 +1,46 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 import csv
 import io
-
 from app.schemas.contact import ContactCreate, ContactUpdate, ContactResponse
 from app.services.contact_service import (
     get_contacts, get_contact, create_contact, update_contact, delete_contact
 )
 from typing import List
 
-
-
 router = APIRouter()
+
+@router.get("/export")
+def export_contacts(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    contacts = get_contacts(db, 0, 10000, str(current_user.id))
+    
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['first_name', 'last_name', 'email', 'phone', 'company'])
+    
+    for c in contacts:
+        writer.writerow([
+            c.first_name or '',
+            c.last_name or '',
+            c.email or '',
+            c.phone or '',
+            c.company or '',
+        ])
+    
+    output.seek(0)
+    
+    return StreamingResponse(
+        io.BytesIO(output.getvalue().encode()),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=contacts.csv"}
+    )
 
 @router.get("/", response_model=List[ContactResponse])
 def list_contacts(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -56,14 +81,14 @@ async def import_contacts(
         raise HTTPException(status_code=400, detail="Only CSV files are allowed")
     
     contents = await file.read()
-    decoded = contents.decode('utf-8-sig')  # utf-8-sig handles Excel BOM
+    decoded = contents.decode('utf-8-sig')
     reader = csv.DictReader(io.StringIO(decoded))
     
     imported = 0
     skipped = 0
     errors = []
     
-    for i, row in enumerate(reader, start=2):  # start=2 because row 1 is header
+    for i, row in enumerate(reader, start=2):
         first_name = row.get('first_name', '').strip()
         if not first_name:
             skipped += 1
