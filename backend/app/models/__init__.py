@@ -8,3 +8,4 @@ from .campaign import Campaign, CampaignRecipient
 from .sms_campaign import SmsCampaign, SmsCampaignRecipient
 from .notification import Notification
 from .segment import Segment
+from .email_template import EmailTemplate

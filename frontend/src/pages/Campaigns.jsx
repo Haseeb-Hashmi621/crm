@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Mail, Plus, X, Loader2, Send, Trash2,
   Users, Eye, Clock, CheckCircle2,
-  AlertCircle, MessageSquare, Phone
+  AlertCircle, MessageSquare, Phone, FileText
 } from 'lucide-react'
 import api from '../services/api'
 import toast from 'react-hot-toast'
@@ -24,6 +24,41 @@ function TimeAgo({ dateString }) {
   return <span>{date.toLocaleDateString()}</span>
 }
 
+const TemplatePicker = ({ templates, onSelect, onClose }) => (
+  <div
+    className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4"
+    onClick={onClose}
+  >
+    <div
+      className="bg-gray-900 rounded-2xl border border-gray-800 w-full max-w-lg p-6 max-h-[80vh] overflow-y-auto"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-white font-semibold text-lg">Choose a Template</h2>
+        <button onClick={onClose} className="text-gray-500 hover:text-white">
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+      {templates.length === 0 ? (
+        <p className="text-gray-500 text-sm text-center py-8">No templates found.</p>
+      ) : (
+        <div className="space-y-2">
+          {templates.map(t => (
+            <button
+              key={t.id}
+              onClick={() => onSelect(t)}
+              className="w-full text-left p-4 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg transition-colors"
+            >
+              <p className="text-white text-sm font-medium">{t.name}</p>
+              <p className="text-gray-400 text-xs mt-1 truncate">{t.subject}</p>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  </div>
+)
+
 // ─── EMAIL CAMPAIGNS TAB ──────────────────────────────────────────────────────
 function EmailCampaigns() {
   const [campaigns, setCampaigns] = useState([])
@@ -39,8 +74,10 @@ function EmailCampaigns() {
   const [selectedContacts, setSelectedContacts] = useState([])
   const [sendToAll, setSendToAll] = useState(true)
   const [form, setForm] = useState({ name: '', subject: '', body: '' })
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false)
+  const [availableTemplates, setAvailableTemplates] = useState([])
 
-  useEffect(() => { fetchCampaigns(); fetchContacts() }, [])
+  useEffect(() => { fetchCampaigns(); fetchContacts(); fetchTemplates() }, [])
 
   const fetchCampaigns = async () => {
     try { const res = await api.get('/campaigns/'); setCampaigns(res.data) }
@@ -51,6 +88,15 @@ function EmailCampaigns() {
   const fetchContacts = async () => {
     try { const res = await api.get('/contacts/'); setContacts(res.data) }
     catch (err) { console.error(err) }
+  }
+
+  const fetchTemplates = async () => {
+    try {
+      const res = await api.get('/email-templates/')
+      setAvailableTemplates(res.data)
+    } catch (err) {
+      console.error(err)
+    }
   }
 
   const handleCreate = async () => {
@@ -96,6 +142,11 @@ function EmailCampaigns() {
 
   const toggleContact = (id) =>
     setSelectedContacts(prev => prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id])
+
+  const handleTemplateSelect = (template) => {
+    setForm({ name: form.name, subject: template.subject, body: template.body })
+    setShowTemplatePicker(false)
+  }
 
   const statCards = [
     { label: 'Total', value: campaigns.length, icon: Mail, color: 'bg-violet-500' },
@@ -208,7 +259,18 @@ function EmailCampaigns() {
               className="bg-gray-900 rounded-2xl border border-gray-800 w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-white font-semibold text-lg">New Email Campaign</h2>
-                <button onClick={() => setShowCreateModal(false)} className="text-gray-500 hover:text-white"><X className="w-5 h-5" /></button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowTemplatePicker(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-400 hover:text-violet-400 rounded-lg text-xs transition-colors"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    Use Template
+                  </button>
+                  <button onClick={() => setShowCreateModal(false)} className="text-gray-500 hover:text-white">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
               <div className="space-y-4">
                 <div>
@@ -352,6 +414,14 @@ function EmailCampaigns() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {showTemplatePicker && (
+        <TemplatePicker
+          templates={availableTemplates}
+          onSelect={handleTemplateSelect}
+          onClose={() => setShowTemplatePicker(false)}
+        />
+      )}
     </>
   )
 }

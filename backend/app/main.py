@@ -10,6 +10,7 @@ from app.api.v1.search import router as search_router
 from app.api.v1.sms_campaigns import router as sms_campaigns_router
 from app.api.v1.notifications import router as notifications_router
 from app.api.v1.segments import router as segments_router
+from app.api.v1.email_templates import router as email_templates_router
 
 app = FastAPI(
     title="CRM API",
@@ -35,6 +36,7 @@ app.include_router(tags_router, prefix="/tags", tags=["Tags"])
 app.include_router(search_router, prefix="/search", tags=["Search"])
 app.include_router(notifications_router, prefix="/notifications", tags=["Notifications"])
 app.include_router(segments_router, prefix="/segments", tags=["Segments"])
+app.include_router(email_templates_router, prefix="/email-templates", tags=["Email Templates"])
 
 
 @app.get("/")
