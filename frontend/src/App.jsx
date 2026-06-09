@@ -10,6 +10,7 @@ import Revenue from './pages/Revenue'
 import Settings from './pages/Settings'
 import useAuthStore from './store/authStore'
 import Campaigns from './pages/Campaigns'
+import DealDetail from './pages/DealDetail'
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated } = useAuthStore()
@@ -27,6 +28,7 @@ function App() {
           <Route path="contacts" element={<Contacts />} />
           <Route path="contacts/:id" element={<ContactDetail />} />
           <Route path="deals" element={<Deals />} />
+          <Route path="deals/:id" element={<DealDetail />} />
           <Route path="revenue" element={<Revenue />} />
           <Route path="settings" element={<Settings />} />
           <Route path="campaigns" element={<Campaigns />} />

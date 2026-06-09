@@ -8,9 +8,15 @@ def get_activities_by_contact(db: Session, contact_id: str) -> List[Activity]:
         Activity.contact_id == contact_id
     ).order_by(Activity.created_at.desc()).all()
 
+def get_activities_by_deal(db: Session, deal_id: str) -> List[Activity]:
+    return db.query(Activity).filter(
+        Activity.deal_id == deal_id
+    ).order_by(Activity.created_at.desc()).all()
+
 def create_activity(db: Session, activity_data: ActivityCreate) -> Activity:
     db_activity = Activity(
         contact_id=activity_data.contact_id,
+        deal_id=activity_data.deal_id,
         type=activity_data.type,
         content=activity_data.content
     )

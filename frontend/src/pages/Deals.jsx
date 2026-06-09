@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Plus, X, Loader2, DollarSign } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import api from '../services/api'
 import toast from 'react-hot-toast'
 
@@ -20,6 +21,7 @@ export default function Deals() {
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({ title: '', value: '', stage: 'new', contact_name: '', company: '' })
   const [dragging, setDragging] = useState(null)
+  const navigate = useNavigate()
 
   useEffect(() => { fetchDeals() }, [])
 
@@ -142,13 +144,14 @@ export default function Deals() {
                           draggable
                           onDragStart={() => setDragging(deal.id)}
                           onDragEnd={() => setDragging(null)}
-                          className="bg-gray-900 border border-gray-800 rounded-xl p-4 cursor-grab active:cursor-grabbing hover:border-gray-700 transition-colors"
+                          onClick={() => navigate(`/dashboard/deals/${deal.id}`)}
+                          className="bg-gray-900 border border-gray-800 rounded-xl p-4 cursor-pointer hover:border-violet-500/50 transition-colors"
                         >
                           <div className="flex items-center justify-between mb-2">
                             <p className="text-white text-sm font-medium">{deal.title}</p>
                             <motion.button
                               whileHover={{ scale: 1.1 }}
-                              onClick={() => handleDeleteDeal(deal.id)}
+                              onClick={(e) => { e.stopPropagation(); handleDeleteDeal(deal.id) }}
                               className="text-gray-600 hover:text-red-400 transition-colors"
                             >
                               <X className="w-3 h-3" />
