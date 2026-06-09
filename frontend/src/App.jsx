@@ -11,6 +11,7 @@ import Settings from './pages/Settings'
 import useAuthStore from './store/authStore'
 import Campaigns from './pages/Campaigns'
 import DealDetail from './pages/DealDetail'
+import Segments from './pages/Segments'
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated } = useAuthStore()
@@ -32,6 +33,7 @@ function App() {
           <Route path="revenue" element={<Revenue />} />
           <Route path="settings" element={<Settings />} />
           <Route path="campaigns" element={<Campaigns />} />
+          <Route path="segments" element={<Segments />} />
         </Route>
         <Route path="/" element={<Navigate to="/login" />} />
       </Routes>

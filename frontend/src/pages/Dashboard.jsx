@@ -1,17 +1,18 @@
 import { motion } from 'framer-motion'
-import { Users, TrendingUp, DollarSign, Activity, LogOut, Settings, Mail } from 'lucide-react'
+import { Users, TrendingUp, DollarSign, Activity, LogOut, Settings, Mail, Filter } from 'lucide-react'
 import useAuthStore from '../store/authStore'
 import { useNavigate, useLocation, Outlet } from 'react-router-dom'
 import GlobalSearch from '../components/GlobalSearch'
 import NotificationBell from '../components/NotificationBell'
 
 const navItems = [
-  { label: 'Dashboard', icon: Activity, path: '/dashboard' },
-  { label: 'Contacts', icon: Users, path: '/dashboard/contacts' },
-  { label: 'Deals', icon: TrendingUp, path: '/dashboard/deals' },
-  { label: 'Revenue', icon: DollarSign, path: '/dashboard/revenue' },
-  { label: 'Campaigns', icon: Mail, path: '/dashboard/campaigns' },
-  { label: 'Settings', icon: Settings, path: '/dashboard/settings' },
+  { label: 'Dashboard',  icon: Activity,  path: '/dashboard' },
+  { label: 'Contacts',   icon: Users,     path: '/dashboard/contacts' },
+  { label: 'Deals',      icon: TrendingUp, path: '/dashboard/deals' },
+  { label: 'Revenue',    icon: DollarSign, path: '/dashboard/revenue' },
+  { label: 'Campaigns',  icon: Mail,      path: '/dashboard/campaigns' },
+  { label: 'Segments',   icon: Filter,    path: '/dashboard/segments' },
+  { label: 'Settings',   icon: Settings,  path: '/dashboard/settings' },
 ]
 
 export default function Dashboard() {
@@ -24,7 +25,6 @@ export default function Dashboard() {
     navigate('/login')
   }
 
-  // Match active path — contacts/:id should still highlight Contacts
   const isActive = (path) => {
     if (path === '/dashboard') return location.pathname === '/dashboard'
     return location.pathname.startsWith(path)
@@ -47,7 +47,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <nav className="flex-1 p-4 space-y-1">
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           <GlobalSearch />
           <NotificationBell />
           {navItems.map((item) => (

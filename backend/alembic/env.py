@@ -14,6 +14,7 @@ from app.core.database import Base
 from app.models import user, workspace, contact, tag, deal
 from app.models.activity import Activity
 from app.models.tag import contact_tags
+from app.models.segment import Segment
 
 config = context.config
 
