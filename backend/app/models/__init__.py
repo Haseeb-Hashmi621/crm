@@ -6,3 +6,4 @@ from .deal import Deal
 from .activity import Activity
 from .campaign import Campaign, CampaignRecipient
 from .sms_campaign import SmsCampaign, SmsCampaignRecipient
+from .notification import Notification

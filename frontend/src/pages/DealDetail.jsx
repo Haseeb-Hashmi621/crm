@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, DollarSign, Building2, User, Tag,
   MessageSquare, PhoneCall, Send, Users,
-  Plus, Trash2, Loader2, X, Check, Edit2
+  Plus, Trash2, Loader2, X, Check, Edit2, ExternalLink
 } from 'lucide-react'
 import api from '../services/api'
 import toast from 'react-hot-toast'
@@ -216,12 +216,24 @@ export default function DealDetail() {
             {/* Deal info / edit form */}
             {!editing ? (
               <div className="space-y-3">
+                {/* Contact — clickable if linked */}
                 {deal?.contact_name && (
                   <div className="flex items-center gap-3 text-sm">
                     <User className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                    <span className="text-gray-300">{deal.contact_name}</span>
+                    {deal.contact_id ? (
+                      <button
+                        onClick={() => navigate(`/dashboard/contacts/${deal.contact_id}`)}
+                        className="text-violet-400 hover:text-violet-300 transition-colors flex items-center gap-1.5 group"
+                      >
+                        <span className="group-hover:underline">{deal.contact_name}</span>
+                        <ExternalLink className="w-3 h-3 opacity-60 group-hover:opacity-100" />
+                      </button>
+                    ) : (
+                      <span className="text-gray-300">{deal.contact_name}</span>
+                    )}
                   </div>
                 )}
+
                 {deal?.company && (
                   <div className="flex items-center gap-3 text-sm">
                     <Building2 className="w-4 h-4 text-gray-500 flex-shrink-0" />
@@ -315,9 +327,7 @@ export default function DealDetail() {
                     }`}
                   >
                     <span>{info.label}</span>
-                    {isCurrent && (
-                      <Check className="w-3.5 h-3.5" />
-                    )}
+                    {isCurrent && <Check className="w-3.5 h-3.5" />}
                   </motion.button>
                 )
               })}

@@ -10,12 +10,7 @@ from app.core.database import Base
 class Deal(Base):
     __tablename__ = "deals"
 
-    id = Column(
-        UUID(as_uuid=True),
-        primary_key=True,
-        default=uuid.uuid4
-    )
-
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     title = Column(String, nullable=False)
     value = Column(Float, default=0)
     stage = Column(String, default="new")
@@ -27,6 +22,12 @@ class Deal(Base):
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False
+    )
+
+    contact_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("contacts.id", ondelete="SET NULL"),
+        nullable=True
     )
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())

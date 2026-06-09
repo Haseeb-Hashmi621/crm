@@ -3,7 +3,7 @@ import { Users, TrendingUp, DollarSign, Activity, LogOut, Settings, Mail } from 
 import useAuthStore from '../store/authStore'
 import { useNavigate, useLocation, Outlet } from 'react-router-dom'
 import GlobalSearch from '../components/GlobalSearch'
-
+import NotificationBell from '../components/NotificationBell'
 
 const navItems = [
   { label: 'Dashboard', icon: Activity, path: '/dashboard' },
@@ -49,6 +49,7 @@ export default function Dashboard() {
 
         <nav className="flex-1 p-4 space-y-1">
           <GlobalSearch />
+          <NotificationBell />
           {navItems.map((item) => (
             <motion.button
               key={item.label}

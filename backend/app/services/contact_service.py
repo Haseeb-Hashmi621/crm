@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session, joinedload
 from app.models.contact import Contact
 from app.schemas.contact import ContactCreate, ContactUpdate
+from app.services.notification_service import create_notification
 from typing import List, Optional
 
 def get_contacts(db: Session, skip: int = 0, limit: int = 100, user_id: str = None) -> List[Contact]:
@@ -27,6 +28,16 @@ def create_contact(db: Session, contact_data: ContactCreate, user_id: str) -> Co
     db.add(db_contact)
     db.commit()
     db.refresh(db_contact)
+
+    full_name = f"{db_contact.first_name or ''} {db_contact.last_name or ''}".strip()
+    create_notification(
+        db, user_id,
+        type="contact_added",
+        title="New contact added",
+        message=f"{full_name} was added to your contacts",
+        link=f"/dashboard/contacts/{db_contact.id}"
+    )
+
     return db_contact
 
 def update_contact(db: Session, contact_id: str, contact_data: ContactUpdate, user_id: str = None) -> Optional[Contact]:

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Plus, X, Loader2, DollarSign } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
@@ -14,16 +14,118 @@ const STAGES = [
   { id: 'lost', label: 'Lost', color: 'border-red-500', dot: 'bg-red-500' },
 ]
 
+function ContactPicker({ contacts, selectedId, onSelect }) {
+  const [search, setSearch] = useState('')
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+
+  const selected = contacts.find(c => c.id === selectedId)
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const filtered = contacts.filter(c => {
+    const name = `${c.first_name || ''} ${c.last_name || ''}`.toLowerCase()
+    return name.includes(search.toLowerCase()) || (c.email || '').toLowerCase().includes(search.toLowerCase())
+  }).slice(0, 8)
+
+  return (
+    <div ref={ref} className="relative">
+      <div
+        onClick={() => setOpen(o => !o)}
+        className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-4 py-2.5 text-sm cursor-pointer flex items-center justify-between hover:border-violet-500 transition-colors"
+      >
+        {selected ? (
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-5 bg-violet-600 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
+              {selected.first_name?.[0]}{selected.last_name?.[0] || ''}
+            </div>
+            <span>{selected.first_name} {selected.last_name}</span>
+          </div>
+        ) : (
+          <span className="text-gray-500">Search contacts...</span>
+        )}
+        <div className="flex items-center gap-1">
+          {selected && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onSelect(null); setSearch('') }}
+              className="text-gray-500 hover:text-red-400 transition-colors p-0.5"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.1 }}
+            className="absolute left-0 right-0 top-full mt-1 bg-gray-800 border border-gray-700 rounded-xl shadow-2xl z-50 overflow-hidden"
+          >
+            <div className="p-2 border-b border-gray-700">
+              <input
+                autoFocus
+                type="text"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Type to search..."
+                className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-violet-500 transition-colors"
+              />
+            </div>
+            <div className="max-h-40 overflow-y-auto py-1">
+              {filtered.length === 0 ? (
+                <p className="text-gray-500 text-xs text-center py-4">No contacts found</p>
+              ) : (
+                filtered.map(contact => (
+                  <button
+                    key={contact.id}
+                    onClick={() => { onSelect(contact); setOpen(false); setSearch('') }}
+                    className="w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-700 transition-colors text-left"
+                  >
+                    <div className="w-6 h-6 bg-violet-600 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
+                      {contact.first_name?.[0]}{contact.last_name?.[0] || ''}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-white text-xs font-medium">{contact.first_name} {contact.last_name}</p>
+                      {contact.email && <p className="text-gray-500 text-[10px] truncate">{contact.email}</p>}
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
 export default function Deals() {
   const [deals, setDeals] = useState([])
+  const [contacts, setContacts] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [form, setForm] = useState({ title: '', value: '', stage: 'new', contact_name: '', company: '' })
+  const [form, setForm] = useState({
+    title: '', value: '', stage: 'new',
+    contact_name: '', company: '', contact_id: null
+  })
   const [dragging, setDragging] = useState(null)
   const navigate = useNavigate()
 
-  useEffect(() => { fetchDeals() }, [])
+  useEffect(() => {
+    fetchDeals()
+    fetchContacts()
+  }, [])
 
   const fetchDeals = async () => {
     try {
@@ -36,14 +138,27 @@ export default function Deals() {
     }
   }
 
+  const fetchContacts = async () => {
+    try {
+      const res = await api.get('/contacts/')
+      setContacts(res.data)
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
   const handleSave = async () => {
     setSaving(true)
     try {
-      await api.post('/deals/', { ...form, value: parseFloat(form.value) || 0 })
+      await api.post('/deals/', {
+        ...form,
+        value: parseFloat(form.value) || 0,
+        contact_id: form.contact_id || null,
+      })
       toast.success('Deal added!')
       fetchDeals()
       setShowModal(false)
-      setForm({ title: '', value: '', stage: 'new', contact_name: '', company: '' })
+      setForm({ title: '', value: '', stage: 'new', contact_name: '', company: '', contact_id: null })
     } catch (err) {
       toast.error('Something went wrong')
       console.error(err)
@@ -182,6 +297,7 @@ export default function Deals() {
         )}
       </motion.div>
 
+      {/* Add Deal Modal */}
       <AnimatePresence>
         {showModal && (
           <motion.div
@@ -198,7 +314,13 @@ export default function Deals() {
             >
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-white font-semibold">Add Deal</h2>
-                <button onClick={() => setShowModal(false)} className="text-gray-500 hover:text-white">
+                <button
+                  onClick={() => {
+                    setShowModal(false)
+                    setForm({ title: '', value: '', stage: 'new', contact_name: '', company: '', contact_id: null })
+                  }}
+                  className="text-gray-500 hover:text-white"
+                >
                   <X className="w-5 h-5" />
                 </button>
               </div>
@@ -207,7 +329,6 @@ export default function Deals() {
                 {[
                   { key: 'title', label: 'Deal Title' },
                   { key: 'value', label: 'Value ($)' },
-                  { key: 'contact_name', label: 'Contact Name' },
                   { key: 'company', label: 'Company' },
                 ].map((field) => (
                   <div key={field.key}>
@@ -220,6 +341,23 @@ export default function Deals() {
                     />
                   </div>
                 ))}
+
+                {/* Contact Picker */}
+                <div>
+                  <label className="text-sm font-medium text-gray-300 mb-1.5 block">Link Contact</label>
+                  <ContactPicker
+                    contacts={contacts}
+                    selectedId={form.contact_id}
+                    onSelect={(contact) => setForm({
+                      ...form,
+                      contact_id: contact ? contact.id : null,
+                      contact_name: contact
+                        ? `${contact.first_name || ''} ${contact.last_name || ''}`.trim()
+                        : ''
+                    })}
+                  />
+                </div>
+
                 <div>
                   <label className="text-sm font-medium text-gray-300 mb-1.5 block">Stage</label>
                   <select
@@ -234,7 +372,10 @@ export default function Deals() {
 
               <div className="flex gap-3 mt-6">
                 <button
-                  onClick={() => setShowModal(false)}
+                  onClick={() => {
+                    setShowModal(false)
+                    setForm({ title: '', value: '', stage: 'new', contact_name: '', company: '', contact_id: null })
+                  }}
                   className="flex-1 py-2.5 rounded-xl border border-gray-700 text-gray-400 hover:text-white text-sm transition-colors"
                 >
                   Cancel

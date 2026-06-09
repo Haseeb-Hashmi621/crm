@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 from app.models.activity import Activity
 from app.schemas.activity import ActivityCreate
+from app.services.notification_service import create_notification
 from typing import List
 
 def get_activities_by_contact(db: Session, contact_id: str) -> List[Activity]:
