@@ -30,7 +30,7 @@ def export_contacts(
             c.first_name or '',
             c.last_name or '',
             c.email or '',
-            c.phone or '',
+            f'="{c.phone}"' if c.phone else '',
             c.company or '',
         ])
     

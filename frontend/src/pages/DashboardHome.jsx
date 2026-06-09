@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Users, TrendingUp, DollarSign, Activity, MessageSquare, PhoneCall, Send, Calendar } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import api from '../services/api'
@@ -10,6 +10,14 @@ const ACTIVITY_TYPE_CONFIG = {
   email: { icon: Send, color: 'text-blue-400', bg: 'bg-blue-500/10', label: 'Email' },
   meeting: { icon: Calendar, color: 'text-orange-400', bg: 'bg-orange-500/10', label: 'Meeting' },
 }
+
+const FILTER_OPTIONS = [
+  { id: 'all', label: 'All' },
+  { id: 'note', label: 'Notes', color: 'text-violet-400' },
+  { id: 'call', label: 'Calls', color: 'text-green-400' },
+  { id: 'email', label: 'Emails', color: 'text-blue-400' },
+  { id: 'meeting', label: 'Meetings', color: 'text-orange-400' },
+]
 
 function TimeAgo({ dateString }) {
   const date = new Date(dateString)
@@ -26,6 +34,7 @@ export default function DashboardHome() {
   const [stats, setStats] = useState({ contacts: 0, deals: 0, won: 0, activities: 0 })
   const [recentActivities, setRecentActivities] = useState([])
   const [loadingActivities, setLoadingActivities] = useState(true)
+  const [activeFilter, setActiveFilter] = useState('all')
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -42,7 +51,6 @@ export default function DashboardHome() {
           .filter(d => d.stage === 'won')
           .reduce((sum, d) => sum + d.value, 0)
 
-        // Fetch activities for all contacts in parallel
         const activityPromises = contacts.map(c =>
           api.get(`/activities/${c.id}`)
             .then(res => res.data.map(a => ({ ...a, contact: c })))
@@ -52,13 +60,13 @@ export default function DashboardHome() {
         const allActivities = activityResults
           .flat()
           .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-          .slice(0, 10)
+          .slice(0, 50)
 
         setStats({
           contacts: contacts.length,
           deals: deals.length,
           won: wonValue,
-          activities: allActivities.length > 0 ? activityResults.flat().length : 0
+          activities: activityResults.flat().length
         })
         setRecentActivities(allActivities)
       } catch (err) {
@@ -69,6 +77,10 @@ export default function DashboardHome() {
     }
     fetchAll()
   }, [])
+
+  const filteredActivities = activeFilter === 'all'
+    ? recentActivities
+    : recentActivities.filter(a => a.type === activeFilter)
 
   const statCards = [
     { label: 'Total Contacts', value: stats.contacts, icon: Users, color: 'bg-violet-500' },
@@ -104,12 +116,43 @@ export default function DashboardHome() {
 
         {/* Recent Activity Feed */}
         <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800">
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center justify-between mb-4">
             <h2 className="text-white font-semibold">Recent Activity</h2>
             {recentActivities.length > 0 && (
-              <span className="text-gray-500 text-xs">{recentActivities.length} recent</span>
+              <span className="text-gray-500 text-xs">{filteredActivities.length} shown</span>
             )}
           </div>
+
+          {/* Filter Tabs */}
+          {!loadingActivities && recentActivities.length > 0 && (
+            <div className="flex items-center gap-2 mb-5 flex-wrap">
+              {FILTER_OPTIONS.map(filter => {
+                const count = filter.id === 'all'
+                  ? recentActivities.length
+                  : recentActivities.filter(a => a.type === filter.id).length
+                const isActive = activeFilter === filter.id
+                return (
+                  <motion.button
+                    key={filter.id}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setActiveFilter(filter.id)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                      isActive
+                        ? 'bg-violet-600 text-white border-violet-500'
+                        : 'bg-gray-800 text-gray-500 border-gray-700 hover:text-gray-300 hover:border-gray-600'
+                    }`}
+                  >
+                    {filter.label}
+                    <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${
+                      isActive ? 'bg-white/20 text-white' : 'bg-gray-700 text-gray-400'
+                    }`}>
+                      {count}
+                    </span>
+                  </motion.button>
+                )
+              })}
+            </div>
+          )}
 
           {loadingActivities ? (
             <div className="space-y-4">
@@ -129,51 +172,79 @@ export default function DashboardHome() {
               <p>No activity yet</p>
               <p className="text-sm mt-1">Start by adding contacts and logging activities</p>
             </div>
+          ) : filteredActivities.length === 0 ? (
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeFilter}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                className="text-center py-12 text-gray-500"
+              >
+                {(() => {
+                  const config = ACTIVITY_TYPE_CONFIG[activeFilter]
+                  const Icon = config?.icon || Activity
+                  return (
+                    <>
+                      <Icon className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                      <p>No {activeFilter}s logged yet</p>
+                    </>
+                  )
+                })()}
+              </motion.div>
+            </AnimatePresence>
           ) : (
-            <div className="space-y-1">
-              {recentActivities.map((activity, i) => {
-                const config = ACTIVITY_TYPE_CONFIG[activity.type] || ACTIVITY_TYPE_CONFIG.note
-                const Icon = config.icon
-                const contactName = `${activity.contact?.first_name || ''} ${activity.contact?.last_name || ''}`.trim()
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeFilter}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.15 }}
+                className="space-y-1"
+              >
+                {filteredActivities.map((activity, i) => {
+                  const config = ACTIVITY_TYPE_CONFIG[activity.type] || ACTIVITY_TYPE_CONFIG.note
+                  const Icon = config.icon
+                  const contactName = `${activity.contact?.first_name || ''} ${activity.contact?.last_name || ''}`.trim()
 
-                return (
-                  <motion.div
-                    key={activity.id}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.04 }}
-                    onClick={() => navigate(`/dashboard/contacts/${activity.contact_id}`)}
-                    className="flex gap-3 py-3 border-b border-gray-800 last:border-0 hover:bg-gray-800/40 rounded-xl px-2 cursor-pointer transition-colors group"
-                  >
-                    {/* Icon */}
-                    <div className={`w-8 h-8 rounded-full ${config.bg} flex items-center justify-center flex-shrink-0 mt-0.5`}>
-                      <Icon className={`w-3.5 h-3.5 ${config.color}`} />
-                    </div>
-
-                    {/* Content */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <span className={`text-xs font-semibold uppercase tracking-wide ${config.color}`}>
-                          {config.label}
-                        </span>
-                        {contactName && (
-                          <>
-                            <span className="text-gray-600 text-xs">·</span>
-                            <span className="text-gray-400 text-xs font-medium group-hover:text-violet-400 transition-colors">
-                              {contactName}
-                            </span>
-                          </>
-                        )}
-                        <span className="text-gray-600 text-xs ml-auto">
-                          <TimeAgo dateString={activity.created_at} />
-                        </span>
+                  return (
+                    <motion.div
+                      key={activity.id}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: i * 0.03 }}
+                      onClick={() => navigate(`/dashboard/contacts/${activity.contact_id}`)}
+                      className="flex gap-3 py-3 border-b border-gray-800 last:border-0 hover:bg-gray-800/40 rounded-xl px-2 cursor-pointer transition-colors group"
+                    >
+                      <div className={`w-8 h-8 rounded-full ${config.bg} flex items-center justify-center flex-shrink-0 mt-0.5`}>
+                        <Icon className={`w-3.5 h-3.5 ${config.color}`} />
                       </div>
-                      <p className="text-gray-400 text-sm truncate">{activity.content}</p>
-                    </div>
-                  </motion.div>
-                )
-              })}
-            </div>
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className={`text-xs font-semibold uppercase tracking-wide ${config.color}`}>
+                            {config.label}
+                          </span>
+                          {contactName && (
+                            <>
+                              <span className="text-gray-600 text-xs">·</span>
+                              <span className="text-gray-400 text-xs font-medium group-hover:text-violet-400 transition-colors">
+                                {contactName}
+                              </span>
+                            </>
+                          )}
+                          <span className="text-gray-600 text-xs ml-auto">
+                            <TimeAgo dateString={activity.created_at} />
+                          </span>
+                        </div>
+                        <p className="text-gray-400 text-sm truncate">{activity.content}</p>
+                      </div>
+                    </motion.div>
+                  )
+                })}
+              </motion.div>
+            </AnimatePresence>
           )}
         </div>
       </motion.div>
