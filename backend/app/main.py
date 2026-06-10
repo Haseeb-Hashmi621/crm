@@ -38,7 +38,6 @@ app.include_router(notifications_router, prefix="/notifications", tags=["Notific
 app.include_router(segments_router, prefix="/segments", tags=["Segments"])
 app.include_router(email_templates_router, prefix="/email-templates", tags=["Email Templates"])
 
-
 @app.get("/")
 def root():
     return {"message": "CRM API is running!"}
