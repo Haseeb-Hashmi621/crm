@@ -6,6 +6,7 @@ from .deal import Deal
 from .activity import Activity
 from .campaign import Campaign, CampaignRecipient
 from .sms_campaign import SmsCampaign, SmsCampaignRecipient
+from .whatsapp_campaign import WhatsappCampaign, WhatsappCampaignRecipient
 from .notification import Notification
 from .segment import Segment
 from .email_template import EmailTemplate

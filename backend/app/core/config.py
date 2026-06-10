@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     TWILIO_ACCOUNT_SID: str
     TWILIO_AUTH_TOKEN: str
     TWILIO_PHONE_NUMBER: str
+    TWILIO_WHATSAPP_NUMBER: str = "whatsapp:+14155238886"
 
     class Config:
         env_file = ".env"
