@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { Users, TrendingUp, DollarSign, Activity, LogOut, Settings, Mail, Filter, FileText } from 'lucide-react'
+import { Users, TrendingUp, DollarSign, Activity, LogOut, Settings, Mail, Filter, FileText, Inbox } from 'lucide-react'
 import useAuthStore from '../store/authStore'
 import { useNavigate, useLocation, Outlet } from 'react-router-dom'
 import GlobalSearch from '../components/GlobalSearch'
@@ -14,6 +14,7 @@ const navItems = [
   { label: 'Segments',   icon: Filter,    path: '/dashboard/segments' },
   { label: 'Templates', icon: FileText, path: '/dashboard/templates' },
   { label: 'Settings',   icon: Settings,  path: '/dashboard/settings' },
+  { label: 'Inbox', icon: Inbox, path: '/dashboard/inbox' },
 ]
 
 export default function Dashboard() {
