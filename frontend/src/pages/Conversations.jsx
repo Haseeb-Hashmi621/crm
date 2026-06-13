@@ -4,6 +4,7 @@ import {
   Search, Send, Loader2, MessageSquare, PhoneCall, Mail,
   Users as UsersIcon, MessageCircle, Phone as PhoneIcon, ChevronLeft
 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import api from '../services/api'
 import toast from 'react-hot-toast'
 
@@ -41,6 +42,8 @@ function ChannelBadge({ type, size = 'sm' }) {
 }
 
 export default function Conversations() {
+  const navigate = useNavigate()
+
   const [conversations, setConversations] = useState([])
   const [loadingList, setLoadingList] = useState(true)
   const [search, setSearch] = useState('')
@@ -55,6 +58,14 @@ export default function Conversations() {
   const [sending, setSending] = useState(false)
 
   const threadEndRef = useRef(null)
+  const selectedRef = useRef(null)
+  const conversationsRef = useRef([])
+  const threadRef = useRef(null)
+
+  // Keep refs in sync
+  useEffect(() => { selectedRef.current = selected }, [selected])
+  useEffect(() => { conversationsRef.current = conversations }, [conversations])
+  useEffect(() => { threadRef.current = thread }, [thread])
 
   useEffect(() => { fetchConversations() }, [])
 
@@ -66,11 +77,58 @@ export default function Conversations() {
     threadEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [thread])
 
+  // Poll active thread every 5 seconds — detect new inbound messages and toast
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      const currentSelected = selectedRef.current
+      if (!currentSelected) return
+      try {
+        const res = await api.get(`/conversations/${currentSelected.id}`)
+        const newThread = res.data
+        const oldMessages = threadRef.current?.messages || []
+        const newMessages = newThread?.messages || []
+
+        // Detect truly new inbound messages
+        if (newMessages.length > oldMessages.length) {
+          const added = newMessages.slice(oldMessages.length)
+          added.forEach(msg => {
+            if (msg.content.startsWith('[Inbound]')) {
+              const preview = msg.content.replace(/^\[Inbound\]\s*/, '').slice(0, 60)
+              const label = CHANNEL_CONFIG[msg.type]?.label || msg.type
+              toast(`↙ New ${label} from ${currentSelected.first_name}: "${preview}"`, {
+                icon: '💬',
+                duration: 5000,
+              })
+            }
+          })
+        }
+
+        setThread(newThread)
+      } catch (err) {
+        // silent fail
+      }
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [])
+
+  // Poll conversation list every 8 seconds to update sidebar previews
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const res = await api.get('/conversations/')
+        setConversations(res.data)
+      } catch (err) {
+        // silent fail
+      }
+    }, 8000)
+    return () => clearInterval(interval)
+  }, [])
+
   const fetchConversations = async () => {
     try {
       const res = await api.get('/conversations/')
       setConversations(res.data)
-      if (!selected && res.data.length > 0) {
+      if (!selectedRef.current && res.data.length > 0) {
         setSelected(res.data[0].contact)
       }
     } catch (err) {
@@ -104,19 +162,17 @@ export default function Conversations() {
       setContent('')
       setSubject('')
 
-      // update list preview
+      // update sidebar preview immediately after sending
       setConversations(prev => {
         const updated = prev.map(c => c.contact.id === selected.id
           ? {
               ...c,
-              last_message_type: res.data.message.type,
-              last_message_preview: res.data.message.content.slice(0, 120),
-              last_message_at: res.data.message.created_at,
+              last_activity: res.data.message,
             }
           : c)
         return updated.sort((a, b) => {
-          const ta = a.last_message_at ? new Date(a.last_message_at) : 0
-          const tb = b.last_message_at ? new Date(b.last_message_at) : 0
+          const ta = a.last_activity?.created_at ? new Date(a.last_activity.created_at) : 0
+          const tb = b.last_activity?.created_at ? new Date(b.last_activity.created_at) : 0
           return tb - ta
         })
       })
@@ -174,6 +230,7 @@ export default function Conversations() {
             filtered.map(item => {
               const c = item.contact
               const isActive = selected?.id === c.id
+              const lastAct = item.last_activity
               return (
                 <button
                   key={c.id}
@@ -188,14 +245,18 @@ export default function Conversations() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-white text-sm font-medium truncate">{c.first_name} {c.last_name}</p>
-                      {item.last_message_at && (
-                        <span className="text-gray-600 text-[10px] flex-shrink-0"><TimeAgo dateString={item.last_message_at} /></span>
+                      {lastAct && (
+                        <span className="text-gray-600 text-[10px] flex-shrink-0">
+                          <TimeAgo dateString={lastAct.created_at} />
+                        </span>
                       )}
                     </div>
                     <div className="flex items-center gap-1.5 mt-0.5">
-                      {item.last_message_type && <ChannelBadge type={item.last_message_type} />}
+                      {lastAct && <ChannelBadge type={lastAct.type} />}
                       <p className="text-gray-500 text-xs truncate">
-                        {item.last_message_preview || 'No messages yet'}
+                        {lastAct
+                          ? lastAct.content.replace(/^\[Inbound\]\s*/, '').slice(0, 60)
+                          : 'No messages yet'}
                       </p>
                     </div>
                   </div>
@@ -222,15 +283,23 @@ export default function Conversations() {
               <button onClick={() => setSelected(null)} className="lg:hidden text-gray-500 hover:text-white">
                 <ChevronLeft className="w-5 h-5" />
               </button>
-              <div className="w-9 h-9 bg-violet-600 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                {selected.first_name?.[0]}{selected.last_name?.[0] || ''}
-              </div>
-              <div className="min-w-0">
-                <p className="text-white font-medium text-sm truncate">{selected.first_name} {selected.last_name}</p>
-                <p className="text-gray-500 text-xs truncate">
-                  {[selected.email, selected.phone, selected.company].filter(Boolean).join(' · ') || 'No contact details'}
-                </p>
-              </div>
+              <button
+                onClick={() => navigate(`/dashboard/contacts/${selected.id}`)}
+                className="flex items-center gap-3 min-w-0 text-left group"
+                title="View contact details"
+              >
+                <div className="w-9 h-9 bg-violet-600 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 group-hover:ring-2 group-hover:ring-violet-400/50 transition-all">
+                  {selected.first_name?.[0]}{selected.last_name?.[0] || ''}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-white font-medium text-sm truncate group-hover:text-violet-300 transition-colors">
+                    {selected.first_name} {selected.last_name}
+                  </p>
+                  <p className="text-gray-500 text-xs truncate">
+                    {[selected.email, selected.phone, selected.company].filter(Boolean).join(' · ') || 'No contact details'}
+                  </p>
+                </div>
+              </button>
             </div>
 
             {/* Thread messages */}
@@ -251,6 +320,7 @@ export default function Conversations() {
                     const displayContent = isInbound
                       ? msg.content.replace(/^\[Inbound\]\s*/, '')
                       : msg.content
+
                     return (
                       <motion.div
                         key={msg.id}
@@ -269,10 +339,8 @@ export default function Conversations() {
                               <TimeAgo dateString={msg.created_at} />
                             </span>
                           </div>
-                          <div className={`rounded-2xl px-4 py-2.5 border ${
-                            isInbound
-                              ? `${config.bg} ${config.border} rounded-tl-sm`
-                              : `${config.bg} ${config.border} rounded-tr-sm`
+                          <div className={`rounded-2xl px-4 py-2.5 border ${config.bg} ${config.border} ${
+                            isInbound ? 'rounded-tl-sm' : 'rounded-tr-sm'
                           }`}>
                             <p className="text-gray-200 text-sm whitespace-pre-wrap">{displayContent}</p>
                           </div>

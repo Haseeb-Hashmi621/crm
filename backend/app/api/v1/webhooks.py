@@ -3,76 +3,68 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models.contact import Contact
 from app.models.activity import Activity
-from sqlalchemy import func
 
 router = APIRouter()
 
 
 def _normalize_phone(phone: str) -> str:
-    """Strip whatsapp: prefix and leading + for comparison."""
     phone = phone.strip()
     if phone.lower().startswith("whatsapp:"):
         phone = phone[9:]
-    if phone.startswith("+"):
-        phone = phone[1:]
-    return phone
+    return ''.join(filter(str.isdigit, phone))
 
 
 def _find_contact_by_phone(db: Session, raw_phone: str):
-    """
-    Find a contact by phone number, tolerating formatting differences.
-    Strips whatsapp: prefix, leading +, leading country code 92, leading 0.
-    """
     normalized = _normalize_phone(raw_phone)
+    print(f"DEBUG - Normalized inbound number: {normalized}")
 
-    # Try exact match first (after stripping + and whatsapp:)
     contacts = db.query(Contact).all()
+    print(f"DEBUG - Total contacts in DB: {len(contacts)}")
+
     for contact in contacts:
         if not contact.phone:
             continue
         stored = _normalize_phone(contact.phone)
+        print(f"DEBUG - Comparing with contact: {contact.first_name}, stored normalized: {stored}")
 
-        # Direct match
         if stored == normalized:
+            print(f"DEBUG - Direct match found: {contact.first_name}")
             return contact
 
-        # Pakistani numbers: 923XXXXXXXXX == 03XXXXXXXXX == 3XXXXXXXXX
-        variants = set()
-        for n in [stored, normalized]:
-            variants.add(n)
-            if n.startswith("92") and len(n) == 12:
-                variants.add("0" + n[2:])   # 03XXXXXXXXX
-                variants.add(n[2:])          # 3XXXXXXXXX
-            if n.startswith("0") and len(n) == 11:
-                variants.add("92" + n[1:])  # 923XXXXXXXXX
-                variants.add(n[1:])          # 3XXXXXXXXX
+        variants = set([normalized])
+        if normalized.startswith("92") and len(normalized) == 12:
+            variants.add("0" + normalized[2:])
+            variants.add(normalized[2:])
+        if normalized.startswith("0") and len(normalized) == 11:
+            variants.add("92" + normalized[1:])
+            variants.add(normalized[1:])
 
-        stored_variants = set()
-        for n in [stored]:
-            stored_variants.add(n)
-            if n.startswith("92") and len(n) == 12:
-                stored_variants.add("0" + n[2:])
-                stored_variants.add(n[2:])
-            if n.startswith("0") and len(n) == 11:
-                stored_variants.add("92" + n[1:])
-                stored_variants.add(n[1:])
+        stored_variants = set([stored])
+        if stored.startswith("92") and len(stored) == 12:
+            stored_variants.add("0" + stored[2:])
+            stored_variants.add(stored[2:])
+        if stored.startswith("0") and len(stored) == 11:
+            stored_variants.add("92" + stored[1:])
+            stored_variants.add(stored[1:])
+
+        print(f"DEBUG - Inbound variants: {variants}")
+        print(f"DEBUG - Stored variants: {stored_variants}")
 
         if variants & stored_variants:
+            print(f"DEBUG - Variant match found: {contact.first_name}")
             return contact
 
+    print(f"DEBUG - No contact matched for: {normalized}")
     return None
 
 
 @router.post("/twilio/sms")
 async def twilio_sms_inbound(request: Request, db: Session = Depends(get_db)):
-    """
-    Twilio webhook for inbound SMS.
-    Twilio POST fields: From, To, Body, MessageSid
-    """
     form = await request.form()
     from_number = form.get("From", "")
     body = form.get("Body", "")
-    message_sid = form.get("MessageSid", "")
+
+    print(f"DEBUG SMS - From: {from_number}, Body: {body}")
 
     if not from_number or not body:
         return Response(content="<Response/>", media_type="text/xml")
@@ -87,21 +79,20 @@ async def twilio_sms_inbound(request: Request, db: Session = Depends(get_db)):
         )
         db.add(activity)
         db.commit()
+        print(f"DEBUG SMS - Activity saved for: {contact.first_name}")
+    else:
+        print(f"DEBUG SMS - No contact found, message dropped")
 
-    # Always return empty TwiML so Twilio doesn't retry
     return Response(content="<Response/>", media_type="text/xml")
 
 
 @router.post("/twilio/whatsapp")
 async def twilio_whatsapp_inbound(request: Request, db: Session = Depends(get_db)):
-    """
-    Twilio webhook for inbound WhatsApp messages.
-    Twilio POST fields: From (whatsapp:+...), To, Body, MessageSid
-    """
     form = await request.form()
-    from_number = form.get("From", "")   # e.g. whatsapp:+923001234567
+    from_number = form.get("From", "")
     body = form.get("Body", "")
-    message_sid = form.get("MessageSid", "")
+
+    print(f"DEBUG WHATSAPP - From: {from_number}, Body: {body}")
 
     if not from_number or not body:
         return Response(content="<Response/>", media_type="text/xml")
@@ -116,5 +107,8 @@ async def twilio_whatsapp_inbound(request: Request, db: Session = Depends(get_db
         )
         db.add(activity)
         db.commit()
+        print(f"DEBUG WHATSAPP - Activity saved for: {contact.first_name}")
+    else:
+        print(f"DEBUG WHATSAPP - No contact found, message dropped")
 
     return Response(content="<Response/>", media_type="text/xml")
