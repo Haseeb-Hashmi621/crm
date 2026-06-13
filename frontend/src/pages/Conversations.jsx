@@ -247,21 +247,34 @@ export default function Conversations() {
                 <AnimatePresence initial={false}>
                   {thread.messages.map(msg => {
                     const config = CHANNEL_CONFIG[msg.type] || CHANNEL_CONFIG.note
+                    const isInbound = msg.content.startsWith('[Inbound]')
+                    const displayContent = isInbound
+                      ? msg.content.replace(/^\[Inbound\]\s*/, '')
+                      : msg.content
                     return (
                       <motion.div
                         key={msg.id}
                         initial={{ opacity: 0, y: 8 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className="flex justify-end"
+                        className={`flex ${isInbound ? 'justify-start' : 'justify-end'}`}
                       >
                         <div className="max-w-[70%]">
-                          <div className={`flex items-center gap-2 mb-1 justify-end`}>
-                            <span className="text-gray-600 text-[10px]"><TimeAgo dateString={msg.created_at} /></span>
-                            <span className={`text-[10px] font-semibold uppercase tracking-wide ${config.color}`}>{config.label}</span>
-                            <ChannelBadge type={msg.type} />
+                          <div className={`flex items-center gap-2 mb-1 ${isInbound ? '' : 'justify-end'}`}>
+                            {isInbound && <ChannelBadge type={msg.type} />}
+                            <span className={`text-[10px] font-semibold uppercase tracking-wide ${config.color}`}>
+                              {isInbound ? `↙ ${config.label}` : config.label}
+                            </span>
+                            {!isInbound && <ChannelBadge type={msg.type} />}
+                            <span className="text-gray-600 text-[10px]">
+                              <TimeAgo dateString={msg.created_at} />
+                            </span>
                           </div>
-                          <div className={`rounded-2xl rounded-tr-sm px-4 py-2.5 border ${config.bg} ${config.border}`}>
-                            <p className="text-gray-200 text-sm whitespace-pre-wrap">{msg.content}</p>
+                          <div className={`rounded-2xl px-4 py-2.5 border ${
+                            isInbound
+                              ? `${config.bg} ${config.border} rounded-tl-sm`
+                              : `${config.bg} ${config.border} rounded-tr-sm`
+                          }`}>
+                            <p className="text-gray-200 text-sm whitespace-pre-wrap">{displayContent}</p>
                           </div>
                         </div>
                       </motion.div>

@@ -14,6 +14,7 @@ from app.api.v1.segments import router as segments_router
 from app.api.v1.email_templates import router as email_templates_router
 from app.api.v1.inbox import router as inbox_router
 from app.api.v1.conversations import router as conversations_router
+from app.api.v1.webhooks import router as webhooks_router
 
 app = FastAPI(
     title="CRM API",
@@ -43,6 +44,7 @@ app.include_router(segments_router, prefix="/segments", tags=["Segments"])
 app.include_router(email_templates_router, prefix="/email-templates", tags=["Email Templates"])
 app.include_router(inbox_router, prefix="/inbox", tags=["Inbox"])
 app.include_router(conversations_router, prefix="/conversations", tags=["Conversations"])
+app.include_router(webhooks_router, prefix="/webhooks", tags=["Webhooks"])
 
 @app.get("/")
 def root():
