@@ -1,5 +1,6 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.models.activity import Activity
+from app.models.contact import Contact
 from app.schemas.activity import ActivityCreate
 from app.services.notification_service import create_notification
 from typing import List
@@ -13,6 +14,16 @@ def get_activities_by_deal(db: Session, deal_id: str) -> List[Activity]:
     return db.query(Activity).filter(
         Activity.deal_id == deal_id
     ).order_by(Activity.created_at.desc()).all()
+
+def get_recent_activities(db: Session, limit: int = 50) -> List[Activity]:
+    """Single query — fetches recent activities across all contacts with contact info joined."""
+    return (
+        db.query(Activity)
+        .options(joinedload(Activity.contact))
+        .order_by(Activity.created_at.desc())
+        .limit(limit)
+        .all()
+    )
 
 def create_activity(db: Session, activity_data: ActivityCreate) -> Activity:
     db_activity = Activity(

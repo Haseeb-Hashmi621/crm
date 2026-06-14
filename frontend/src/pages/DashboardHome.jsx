@@ -44,33 +44,25 @@ export default function DashboardHome() {
   useEffect(() => {
     const fetchAll = async () => {
       try {
-        const [contactsRes, dealsRes] = await Promise.all([
+        const [contactsRes, dealsRes, activitiesRes] = await Promise.all([
           api.get('/contacts/'),
-          api.get('/deals/')
+          api.get('/deals/'),
+          api.get('/activities/recent?limit=50')
         ])
 
         const contacts = contactsRes.data
         const deals = dealsRes.data
+        const allActivities = activitiesRes.data
+
         const wonValue = deals
           .filter(d => d.stage === 'won')
           .reduce((sum, d) => sum + d.value, 0)
-
-        const activityPromises = contacts.map(c =>
-          api.get(`/activities/${c.id}`)
-            .then(res => res.data.map(a => ({ ...a, contact: c })))
-            .catch(() => [])
-        )
-        const activityResults = await Promise.all(activityPromises)
-        const allActivities = activityResults
-          .flat()
-          .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-          .slice(0, 50)
 
         setStats({
           contacts: contacts.length,
           deals: deals.length,
           won: wonValue,
-          activities: activityResults.flat().length
+          activities: allActivities.length
         })
         setRecentActivities(allActivities)
       } catch (err) {
