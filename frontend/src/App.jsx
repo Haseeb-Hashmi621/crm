@@ -1,3 +1,4 @@
+// frontend/src/App.jsx
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Login from './pages/Login'
 import Signup from './pages/Signup'
@@ -15,15 +16,28 @@ import Segments from './pages/Segments'
 import Templates from './pages/Templates'
 import InboxPage from './pages/InboxPage'
 import Conversations from './pages/Conversations'
+import useInboundNotifications from './hooks/useInboundNotifications'
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated } = useAuthStore()
   return isAuthenticated ? children : <Navigate to="/login" />
 }
 
+// Mounted inside BrowserRouter + only when authenticated.
+// Polls /conversations/ every 8s and fires a toast on new inbound messages.
+function GlobalNotificationPoller() {
+  useInboundNotifications()
+  return null
+}
+
 function App() {
+  const { isAuthenticated } = useAuthStore()
+
   return (
     <BrowserRouter>
+      {/* Global poller — runs on every page as long as the user is logged in */}
+      {isAuthenticated && <GlobalNotificationPoller />}
+
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
