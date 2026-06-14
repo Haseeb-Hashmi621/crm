@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search, Send, Loader2, MessageSquare, PhoneCall, Mail,
-  Users as UsersIcon, MessageCircle, Phone as PhoneIcon, ChevronLeft
+  Users as UsersIcon, MessageCircle, Phone as PhoneIcon, ChevronLeft, Sparkles, X
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import api from '../services/api'
@@ -58,6 +58,10 @@ export default function Conversations() {
   const [content, setContent] = useState('')
   const [sending, setSending] = useState(false)
 
+  // AI smart reply state
+  const [aiSuggestions, setAiSuggestions] = useState([])
+  const [aiLoading, setAiLoading] = useState(false)
+
   // unreadMap: contactId -> true means there is an unread inbound message
   const [unreadMap, setUnreadMap] = useState({})
 
@@ -65,10 +69,8 @@ export default function Conversations() {
   const selectedRef = useRef(null)
   const conversationsRef = useRef([])
   const threadRef = useRef(null)
-  // Tracks last known sidebar preview per contact to detect new inbound messages
   const lastPreviewRef = useRef({})
 
-  // Keep refs in sync
   useEffect(() => { selectedRef.current = selected }, [selected])
   useEffect(() => { conversationsRef.current = conversations }, [conversations])
   useEffect(() => { threadRef.current = thread }, [thread])
@@ -77,6 +79,8 @@ export default function Conversations() {
 
   useEffect(() => {
     if (selected) fetchThread(selected.id)
+    // Clear AI suggestions when switching contacts
+    setAiSuggestions([])
   }, [selected])
 
   useEffect(() => {
@@ -116,7 +120,7 @@ export default function Conversations() {
     return () => clearInterval(interval)
   }, [])
 
-  // Poll conversation list every 8 seconds — update sidebar + detect unread dots
+  // Poll conversation list every 8 seconds
   useEffect(() => {
     const interval = setInterval(async () => {
       try {
@@ -128,7 +132,6 @@ export default function Conversations() {
           const contactId = item.contact?.id
           if (!contactId) return
 
-          // Use last_message_preview (the correct API field)
           const preview = item.last_message_preview ?? null
           const prevPreview = lastPreviewRef.current[contactId]
 
@@ -162,7 +165,6 @@ export default function Conversations() {
       const convos = res.data
       setConversations(convos)
 
-      // Seed preview map — no unread dots on initial load
       convos.forEach(item => {
         const contactId = item.contact?.id
         if (contactId) {
@@ -192,7 +194,6 @@ export default function Conversations() {
     }
   }
 
-  // Open chat — clear unread dot
   const handleSelectContact = (contact) => {
     setSelected(contact)
     setUnreadMap(prev => {
@@ -200,6 +201,38 @@ export default function Conversations() {
       delete next[contact.id]
       return next
     })
+  }
+
+  // AI smart reply handler
+  const handleAiReply = async () => {
+    if (!selected || !thread?.messages?.length) return
+    setAiLoading(true)
+    setAiSuggestions([])
+    try {
+      const res = await api.post('/ai/suggest-reply', {
+        contact_name: `${selected.first_name} ${selected.last_name || ''}`.trim(),
+        messages: thread.messages.map(m => ({
+          type: m.type,
+          content: m.content,
+          created_at: m.created_at,
+        }))
+      })
+      setAiSuggestions(res.data.suggestions || [])
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'AI suggestion failed')
+    } finally {
+      setAiLoading(false)
+    }
+  }
+
+  // Clicking a suggestion chip populates the textarea
+  const handlePickSuggestion = (suggestion) => {
+    setContent(suggestion)
+    setAiSuggestions([])
+    // Auto-switch to SMS or WhatsApp if contact has phone (most likely channel for AI reply)
+    if (channel === 'note' || channel === 'call' || channel === 'meeting') {
+      if (selected?.phone) setChannel('sms')
+    }
   }
 
   const handleSend = async () => {
@@ -215,8 +248,8 @@ export default function Conversations() {
       setThread(prev => ({ ...prev, messages: [...(prev?.messages || []), newMessage] }))
       setContent('')
       setSubject('')
+      setAiSuggestions([])
 
-      // Update sidebar preview immediately after sending
       const outboundPreview = newMessage.content?.slice(0, 120) ?? ''
       lastPreviewRef.current[selected.id] = outboundPreview
 
@@ -257,7 +290,6 @@ export default function Conversations() {
     return true
   }
 
-  // Strip [Inbound] prefix for display
   const getPreview = (raw) => {
     if (!raw) return null
     return raw.replace(/^\[Inbound\]\s*/i, '').slice(0, 60) || null
@@ -297,7 +329,6 @@ export default function Conversations() {
               const isActive = selected?.id === c.id
               const isUnread = !!unreadMap[c.id]
 
-              // Read the correct API fields (NOT item.last_activity)
               const rawPreview = item.last_message_preview
               const preview = getPreview(rawPreview)
               const msgType = item.last_message_type
@@ -313,7 +344,6 @@ export default function Conversations() {
                     isActive ? 'bg-gray-800' : 'hover:bg-gray-800/50'
                   }`}
                 >
-                  {/* Avatar with unread dot */}
                   <div className="relative flex-shrink-0">
                     <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold ${
                       isActive ? 'bg-violet-500' : 'bg-violet-600'
@@ -446,6 +476,7 @@ export default function Conversations() {
 
             {/* Composer */}
             <div className="border-t border-gray-800 p-4">
+              {/* Channel selector */}
               <div className="flex items-center gap-2 mb-3 flex-wrap">
                 {SEND_CHANNELS.map(ch => {
                   const config = CHANNEL_CONFIG[ch]
@@ -470,6 +501,43 @@ export default function Conversations() {
                   )
                 })}
               </div>
+
+              {/* AI Suggestion chips */}
+              <AnimatePresence>
+                {aiSuggestions.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 6 }}
+                    className="mb-3"
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <Sparkles className="w-3.5 h-3.5 text-violet-400" />
+                      <span className="text-xs text-violet-400 font-medium">AI suggestions — click to use</span>
+                      <button
+                        onClick={() => setAiSuggestions([])}
+                        className="ml-auto text-gray-600 hover:text-gray-400 transition-colors"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      {aiSuggestions.map((suggestion, idx) => (
+                        <motion.button
+                          key={idx}
+                          initial={{ opacity: 0, x: -8 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: idx * 0.07 }}
+                          onClick={() => handlePickSuggestion(suggestion)}
+                          className="text-left text-sm text-gray-300 bg-violet-500/10 border border-violet-500/25 hover:border-violet-500/50 hover:bg-violet-500/20 rounded-xl px-4 py-2.5 transition-all"
+                        >
+                          {suggestion}
+                        </motion.button>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               {channel === 'email' && (
                 <input
@@ -497,6 +565,23 @@ export default function Conversations() {
                   rows={2}
                   className="flex-1 bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-violet-500 transition-colors resize-none placeholder-gray-600"
                 />
+
+                {/* AI Reply button */}
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={handleAiReply}
+                  disabled={aiLoading || !thread?.messages?.length}
+                  title="Get AI reply suggestions"
+                  className="flex items-center justify-center bg-violet-900/60 hover:bg-violet-800/80 disabled:opacity-40 disabled:cursor-not-allowed text-violet-300 w-11 h-11 rounded-xl transition-colors flex-shrink-0 border border-violet-700/50"
+                >
+                  {aiLoading
+                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                    : <Sparkles className="w-4 h-4" />
+                  }
+                </motion.button>
+
+                {/* Send button */}
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
