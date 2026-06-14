@@ -3,9 +3,9 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
+from app.core.config import settings
 from pydantic import BaseModel
 from typing import List
-import os
 import json
 from groq import Groq
 
@@ -30,7 +30,7 @@ async def suggest_reply(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    api_key = os.getenv("GROQ_API_KEY")
+    api_key = settings.GROQ_API_KEY
     if not api_key:
         raise HTTPException(status_code=500, detail="GROQ_API_KEY not configured")
 
@@ -70,7 +70,7 @@ async def suggest_reply(
                 {"role": "user", "content": user_prompt},
             ],
             temperature=0.7,
-            max_tokens=300,
+            max_tokens=500,
         )
 
         raw = completion.choices[0].message.content.strip()

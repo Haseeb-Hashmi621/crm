@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     TWILIO_AUTH_TOKEN: str
     TWILIO_PHONE_NUMBER: str
     TWILIO_WHATSAPP_NUMBER: str = "whatsapp:+14155238886"
+    GROQ_API_KEY: str = ""
 
     class Config:
         env_file = ".env"

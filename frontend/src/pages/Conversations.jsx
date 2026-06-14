@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search, Send, Loader2, MessageSquare, PhoneCall, Mail,
-  Users as UsersIcon, MessageCircle, Phone as PhoneIcon, ChevronLeft, Sparkles, X
+  Users as UsersIcon, MessageCircle, Phone as PhoneIcon,
+  ChevronLeft, Sparkles, X, CheckCircle2
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import api from '../services/api'
@@ -45,31 +46,33 @@ function ChannelBadge({ type, size = 'sm' }) {
 export default function Conversations() {
   const navigate = useNavigate()
 
-  const [conversations, setConversations] = useState([])
-  const [loadingList, setLoadingList] = useState(true)
-  const [search, setSearch] = useState('')
+  const [conversations, setConversations]   = useState([])
+  const [loadingList, setLoadingList]       = useState(true)
+  const [search, setSearch]                 = useState('')
 
-  const [selected, setSelected] = useState(null)
-  const [thread, setThread] = useState(null)
-  const [loadingThread, setLoadingThread] = useState(false)
+  const [selected, setSelected]             = useState(null)
+  const [thread, setThread]                 = useState(null)
+  const [loadingThread, setLoadingThread]   = useState(false)
 
-  const [channel, setChannel] = useState('note')
-  const [subject, setSubject] = useState('')
-  const [content, setContent] = useState('')
-  const [sending, setSending] = useState(false)
+  const [channel, setChannel]               = useState('note')
+  const [subject, setSubject]               = useState('')
+  const [content, setContent]               = useState('')
+  const [sending, setSending]               = useState(false)
 
   // AI smart reply state
-  const [aiSuggestions, setAiSuggestions] = useState([])
-  const [aiLoading, setAiLoading] = useState(false)
+  const [aiSuggestions, setAiSuggestions]   = useState([])
+  const [aiLoading, setAiLoading]           = useState(false)
+  // Track which contact the suggestions belong to — prevents stale chips on fast switch
+  const [aiSuggestionsFor, setAiSuggestionsFor] = useState(null)
 
   // unreadMap: contactId -> true means there is an unread inbound message
-  const [unreadMap, setUnreadMap] = useState({})
+  const [unreadMap, setUnreadMap]           = useState({})
 
-  const threadEndRef = useRef(null)
-  const selectedRef = useRef(null)
-  const conversationsRef = useRef([])
-  const threadRef = useRef(null)
-  const lastPreviewRef = useRef({})
+  const threadEndRef      = useRef(null)
+  const selectedRef       = useRef(null)
+  const conversationsRef  = useRef([])
+  const threadRef         = useRef(null)
+  const lastPreviewRef    = useRef({})
 
   useEffect(() => { selectedRef.current = selected }, [selected])
   useEffect(() => { conversationsRef.current = conversations }, [conversations])
@@ -79,8 +82,9 @@ export default function Conversations() {
 
   useEffect(() => {
     if (selected) fetchThread(selected.id)
-    // Clear AI suggestions when switching contacts
+    // Clear AI suggestions immediately when switching contacts
     setAiSuggestions([])
+    setAiSuggestionsFor(null)
   }, [selected])
 
   useEffect(() => {
@@ -88,6 +92,8 @@ export default function Conversations() {
   }, [thread])
 
   // Poll active thread every 5 seconds
+  const notifiedMessageIdsRef = useRef(new Set())
+
   useEffect(() => {
     const interval = setInterval(async () => {
       const currentSelected = selectedRef.current
@@ -101,10 +107,13 @@ export default function Conversations() {
         if (newMessages.length > oldMessages.length) {
           const added = newMessages.slice(oldMessages.length)
           added.forEach(msg => {
-            if (msg.content.startsWith('[Inbound]')) {
-              const preview = msg.content.replace(/^\[Inbound\]\s*/, '').slice(0, 60)
+            if (
+              msg.content.startsWith('[Inbound]') &&
+              !notifiedMessageIdsRef.current.has(msg.id)
+            ) {
+              notifiedMessageIdsRef.current.add(msg.id)
               const label = CHANNEL_CONFIG[msg.type]?.label || msg.type
-              toast(`↙ New ${label} from ${currentSelected.first_name}: "${preview}"`, {
+              toast(`↙ New ${label} from ${currentSelected.first_name}`, {
                 icon: '💬',
                 duration: 5000,
               })
@@ -159,6 +168,19 @@ export default function Conversations() {
     return () => clearInterval(interval)
   }, [])
 
+  // Esc key — deselect current conversation (like WhatsApp)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && selectedRef.current) {
+        setSelected(null)
+        setAiSuggestions([])
+        setAiSuggestionsFor(null)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
   const fetchConversations = async () => {
     try {
       const res = await api.get('/conversations/')
@@ -206,8 +228,10 @@ export default function Conversations() {
   // AI smart reply handler
   const handleAiReply = async () => {
     if (!selected || !thread?.messages?.length) return
+    const contactId = selected.id
     setAiLoading(true)
     setAiSuggestions([])
+    setAiSuggestionsFor(null)
     try {
       const res = await api.post('/ai/suggest-reply', {
         contact_name: `${selected.first_name} ${selected.last_name || ''}`.trim(),
@@ -217,7 +241,11 @@ export default function Conversations() {
           created_at: m.created_at,
         }))
       })
-      setAiSuggestions(res.data.suggestions || [])
+      // Only apply if user hasn't switched to a different contact mid-request
+      if (selectedRef.current?.id === contactId) {
+        setAiSuggestions(res.data.suggestions || [])
+        setAiSuggestionsFor(contactId)
+      }
     } catch (err) {
       toast.error(err.response?.data?.detail || 'AI suggestion failed')
     } finally {
@@ -226,12 +254,22 @@ export default function Conversations() {
   }
 
   // Clicking a suggestion chip populates the textarea
+  // Auto-switches to the best outbound channel based on conversation history
   const handlePickSuggestion = (suggestion) => {
     setContent(suggestion)
     setAiSuggestions([])
-    // Auto-switch to SMS or WhatsApp if contact has phone (most likely channel for AI reply)
+    setAiSuggestionsFor(null)
+
+    // Auto-switch: find the most recent inbound channel and use that
     if (channel === 'note' || channel === 'call' || channel === 'meeting') {
-      if (selected?.phone) setChannel('sms')
+      const messages = thread?.messages || []
+      // Walk backwards to find most recent inbound message channel
+      const lastInbound = [...messages].reverse().find(m => m.content.startsWith('[Inbound]'))
+      if (lastInbound?.type === 'whatsapp' && selected?.phone) {
+        setChannel('whatsapp')
+      } else if (selected?.phone) {
+        setChannel('sms')
+      }
     }
   }
 
@@ -249,6 +287,7 @@ export default function Conversations() {
       setContent('')
       setSubject('')
       setAiSuggestions([])
+      setAiSuggestionsFor(null)
 
       const outboundPreview = newMessage.content?.slice(0, 120) ?? ''
       lastPreviewRef.current[selected.id] = outboundPreview
@@ -294,6 +333,9 @@ export default function Conversations() {
     if (!raw) return null
     return raw.replace(/^\[Inbound\]\s*/i, '').slice(0, 60) || null
   }
+
+  // Only show suggestions if they belong to the currently selected contact
+  const visibleSuggestions = aiSuggestionsFor === selected?.id ? aiSuggestions : []
 
   return (
     <div className="h-screen flex">
@@ -504,34 +546,36 @@ export default function Conversations() {
 
               {/* AI Suggestion chips */}
               <AnimatePresence>
-                {aiSuggestions.length > 0 && (
+                {visibleSuggestions.length > 0 && (
                   <motion.div
                     initial={{ opacity: 0, y: 6 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: 6 }}
-                    className="mb-3"
+                    className="mb-3 max-h-48 overflow-y-auto"
                   >
                     <div className="flex items-center gap-2 mb-2">
                       <Sparkles className="w-3.5 h-3.5 text-violet-400" />
                       <span className="text-xs text-violet-400 font-medium">AI suggestions — click to use</span>
                       <button
-                        onClick={() => setAiSuggestions([])}
-                        className="ml-auto text-gray-600 hover:text-gray-400 transition-colors"
+                        onClick={() => { setAiSuggestions([]); setAiSuggestionsFor(null) }}
+                        className="ml-auto flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300 transition-colors px-2 py-0.5 rounded-md hover:bg-gray-800"
                       >
-                        <X className="w-3.5 h-3.5" />
+                        <X className="w-3 h-3" />
+                        Dismiss
                       </button>
                     </div>
                     <div className="flex flex-col gap-2">
-                      {aiSuggestions.map((suggestion, idx) => (
+                      {visibleSuggestions.map((suggestion, idx) => (
                         <motion.button
                           key={idx}
                           initial={{ opacity: 0, x: -8 }}
                           animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: idx * 0.07 }}
                           onClick={() => handlePickSuggestion(suggestion)}
-                          className="text-left text-sm text-gray-300 bg-violet-500/10 border border-violet-500/25 hover:border-violet-500/50 hover:bg-violet-500/20 rounded-xl px-4 py-2.5 transition-all"
+                          className="group text-left text-sm text-gray-300 bg-violet-500/10 border border-violet-500/25 hover:border-violet-500/50 hover:bg-violet-500/20 rounded-xl px-4 py-2.5 transition-all flex items-start gap-2"
                         >
-                          {suggestion}
+                          <CheckCircle2 className="w-3.5 h-3.5 text-violet-500/40 group-hover:text-violet-400 transition-colors mt-0.5 flex-shrink-0" />
+                          <span>{suggestion}</span>
                         </motion.button>
                       ))}
                     </div>
@@ -567,19 +611,24 @@ export default function Conversations() {
                 />
 
                 {/* AI Reply button */}
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={handleAiReply}
-                  disabled={aiLoading || !thread?.messages?.length}
-                  title="Get AI reply suggestions"
-                  className="flex items-center justify-center bg-violet-900/60 hover:bg-violet-800/80 disabled:opacity-40 disabled:cursor-not-allowed text-violet-300 w-11 h-11 rounded-xl transition-colors flex-shrink-0 border border-violet-700/50"
-                >
-                  {aiLoading
-                    ? <Loader2 className="w-4 h-4 animate-spin" />
-                    : <Sparkles className="w-4 h-4" />
-                  }
-                </motion.button>
+                <div className="flex flex-col items-center gap-1 flex-shrink-0">
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={handleAiReply}
+                    disabled={aiLoading || !thread?.messages?.length}
+                    title={!thread?.messages?.length ? 'No messages yet to generate suggestions from' : 'Get AI reply suggestions'}
+                    className="flex items-center justify-center bg-violet-900/60 hover:bg-violet-800/80 disabled:opacity-40 disabled:cursor-not-allowed text-violet-300 w-11 h-11 rounded-xl transition-colors border border-violet-700/50"
+                  >
+                    {aiLoading
+                      ? <Loader2 className="w-4 h-4 animate-spin" />
+                      : <Sparkles className="w-4 h-4" />
+                    }
+                  </motion.button>
+                  {aiLoading && (
+                    <span className="text-[9px] text-violet-400/70 whitespace-nowrap">Thinking...</span>
+                  )}
+                </div>
 
                 {/* Send button */}
                 <motion.button
