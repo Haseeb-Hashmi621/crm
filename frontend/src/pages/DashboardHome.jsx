@@ -80,6 +80,8 @@ export default function DashboardHome() {
       }
     }
     fetchAll()
+    const interval = setInterval(fetchAll, 15000)
+    return () => clearInterval(interval)
   }, [])
 
   const filteredActivities = activeFilter === 'all'

@@ -20,6 +20,7 @@ const CHANNEL_CONFIG = {
 const SEND_CHANNELS = ['note', 'call', 'meeting', 'email', 'sms', 'whatsapp']
 
 function TimeAgo({ dateString }) {
+  if (!dateString) return null
   const date = new Date(dateString)
   const diff = Math.floor((Date.now() - date) / 1000)
   if (diff < 60) return <span>{diff}s</span>
@@ -57,80 +58,101 @@ export default function Conversations() {
   const [content, setContent] = useState('')
   const [sending, setSending] = useState(false)
 
-  // Track which contacts have unread messages
-  // key: contact.id, value: last seen activity id when we opened that chat
+  // unreadMap: contactId -> true means there is an unread inbound message
   const [unreadMap, setUnreadMap] = useState({})
-  // Track last known activity id per contact (from sidebar polling)
-  const lastKnownActivityRef = useRef({})
 
   const threadEndRef = useRef(null)
   const selectedRef = useRef(null)
+  const conversationsRef = useRef([])
+  const threadRef = useRef(null)
+  // Tracks last known sidebar preview per contact to detect new inbound messages
+  const lastPreviewRef = useRef({})
 
-  // Keep selectedRef in sync so polling callbacks always see current selected
+  // Keep refs in sync
   useEffect(() => { selectedRef.current = selected }, [selected])
+  useEffect(() => { conversationsRef.current = conversations }, [conversations])
+  useEffect(() => { threadRef.current = thread }, [thread])
 
   useEffect(() => { fetchConversations() }, [])
 
   useEffect(() => {
-    if (selected) {
-      fetchThread(selected.id)
-      // Mark as read when opening a chat
-      setUnreadMap(prev => ({ ...prev, [selected.id]: true }))
-    }
+    if (selected) fetchThread(selected.id)
   }, [selected])
 
   useEffect(() => {
     threadEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [thread])
 
-  // Poll conversation list every 5 seconds to update sidebar previews + unread dots
+  // Poll active thread every 5 seconds
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      const currentSelected = selectedRef.current
+      if (!currentSelected) return
+      try {
+        const res = await api.get(`/conversations/${currentSelected.id}`)
+        const newThread = res.data
+        const oldMessages = threadRef.current?.messages || []
+        const newMessages = newThread?.messages || []
+
+        if (newMessages.length > oldMessages.length) {
+          const added = newMessages.slice(oldMessages.length)
+          added.forEach(msg => {
+            if (msg.content.startsWith('[Inbound]')) {
+              const preview = msg.content.replace(/^\[Inbound\]\s*/, '').slice(0, 60)
+              const label = CHANNEL_CONFIG[msg.type]?.label || msg.type
+              toast(`↙ New ${label} from ${currentSelected.first_name}: "${preview}"`, {
+                icon: '💬',
+                duration: 5000,
+              })
+            }
+          })
+        }
+
+        setThread(newThread)
+      } catch {
+        // silent fail
+      }
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [])
+
+  // Poll conversation list every 8 seconds — update sidebar + detect unread dots
   useEffect(() => {
     const interval = setInterval(async () => {
       try {
         const res = await api.get('/conversations/')
         const newConvos = res.data
 
-        setConversations(prev => {
-          // Detect new inbound messages per contact
-          const newUnread = {}
-          newConvos.forEach(item => {
-            const contactId = item.contact.id
-            const newLastId = item.last_activity?.id
-            const prevLastId = lastKnownActivityRef.current[contactId]
+        const newUnread = {}
+        newConvos.forEach(item => {
+          const contactId = item.contact?.id
+          if (!contactId) return
 
-            if (newLastId && newLastId !== prevLastId) {
-              const isInbound = item.last_activity?.content?.startsWith('[Inbound]')
-              const isCurrentChat = selectedRef.current?.id === contactId
+          // Use last_message_preview (the correct API field)
+          const preview = item.last_message_preview ?? null
+          const prevPreview = lastPreviewRef.current[contactId]
 
-              // Mark unread if it's inbound and NOT currently viewing this chat
-              if (isInbound && !isCurrentChat) {
-                newUnread[contactId] = true
-              }
+          if (preview && preview !== prevPreview) {
+            lastPreviewRef.current[contactId] = preview
 
-              lastKnownActivityRef.current[contactId] = newLastId
+            const isInbound = preview.startsWith('[Inbound]')
+            const isCurrentChat = selectedRef.current?.id === contactId
+
+            if (isInbound && !isCurrentChat) {
+              newUnread[contactId] = true
             }
-          })
-
-          if (Object.keys(newUnread).length > 0) {
-            setUnreadMap(prev => ({ ...prev, ...newUnread }))
           }
-
-          return newConvos
         })
 
-        // Also refresh thread if we're in an active chat
-        const currentSelected = selectedRef.current
-        if (currentSelected) {
-          const updated = newConvos.find(c => c.contact.id === currentSelected.id)
-          if (updated) {
-            // Silently refresh the thread for active chat
-            fetchThread(currentSelected.id, true)
-          }
+        if (Object.keys(newUnread).length > 0) {
+          setUnreadMap(prev => ({ ...prev, ...newUnread }))
         }
-      } catch (err) {
+
+        setConversations(newConvos)
+      } catch {
         // silent fail
       }
-    }, 5000)
+    }, 8000)
     return () => clearInterval(interval)
   }, [])
 
@@ -140,14 +162,14 @@ export default function Conversations() {
       const convos = res.data
       setConversations(convos)
 
-      // Seed the last known activity map
+      // Seed preview map — no unread dots on initial load
       convos.forEach(item => {
-        if (item.last_activity) {
-          lastKnownActivityRef.current[item.contact.id] = item.last_activity.id
+        const contactId = item.contact?.id
+        if (contactId) {
+          lastPreviewRef.current[contactId] = item.last_message_preview ?? null
         }
       })
 
-      // Auto-select first conversation
       if (!selectedRef.current && convos.length > 0) {
         setSelected(convos[0].contact)
       }
@@ -158,21 +180,21 @@ export default function Conversations() {
     }
   }
 
-  const fetchThread = async (contactId, silent = false) => {
-    if (!silent) setLoadingThread(true)
+  const fetchThread = async (contactId) => {
+    setLoadingThread(true)
     try {
       const res = await api.get(`/conversations/${contactId}`)
       setThread(res.data)
-    } catch (err) {
-      if (!silent) toast.error('Failed to load conversation')
+    } catch {
+      toast.error('Failed to load conversation')
     } finally {
-      if (!silent) setLoadingThread(false)
+      setLoadingThread(false)
     }
   }
 
+  // Open chat — clear unread dot
   const handleSelectContact = (contact) => {
     setSelected(contact)
-    // Clear unread for this contact
     setUnreadMap(prev => {
       const next = { ...prev }
       delete next[contact.id]
@@ -190,31 +212,31 @@ export default function Conversations() {
       const res = await api.post(`/conversations/${selected.id}/send`, payload)
       const newMessage = res.data.message
 
-      // Add to thread
       setThread(prev => ({ ...prev, messages: [...(prev?.messages || []), newMessage] }))
       setContent('')
       setSubject('')
 
-      // Update sidebar preview immediately
+      // Update sidebar preview immediately after sending
+      const outboundPreview = newMessage.content?.slice(0, 120) ?? ''
+      lastPreviewRef.current[selected.id] = outboundPreview
+
       setConversations(prev => {
         const updated = prev.map(c => c.contact.id === selected.id
-          ? { ...c, last_activity: newMessage }
+          ? {
+              ...c,
+              last_message_preview: outboundPreview,
+              last_message_type: newMessage.type,
+              last_message_at: newMessage.created_at,
+            }
           : c)
         return updated.sort((a, b) => {
-          const ta = a.last_activity?.created_at ? new Date(a.last_activity.created_at) : 0
-          const tb = b.last_activity?.created_at ? new Date(b.last_activity.created_at) : 0
+          const ta = a.last_message_at ? new Date(a.last_message_at) : 0
+          const tb = b.last_message_at ? new Date(b.last_message_at) : 0
           return tb - ta
         })
       })
 
-      // Update last known activity ref
-      lastKnownActivityRef.current[selected.id] = newMessage.id
-
-      toast.success(
-        channel === 'note' || channel === 'call' || channel === 'meeting'
-          ? 'Logged!'
-          : 'Message sent!'
-      )
+      toast.success(channel === 'note' || channel === 'call' || channel === 'meeting' ? 'Logged!' : 'Message sent!')
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to send')
     } finally {
@@ -225,7 +247,7 @@ export default function Conversations() {
   const filtered = conversations.filter(c => {
     const c_ = c.contact
     const q = search.toLowerCase()
-    return `${c_.first_name} ${c_.last_name} ${c_.email} ${c_.company} ${c_.phone}`.toLowerCase().includes(q)
+    return `${c_.first_name} ${c_.last_name} ${c_.email || ''} ${c_.company || ''} ${c_.phone || ''}`.toLowerCase().includes(q)
   })
 
   const channelAvailable = (ch) => {
@@ -235,16 +257,10 @@ export default function Conversations() {
     return true
   }
 
-  // Format last message preview — strip [Inbound] prefix
-  const getPreview = (lastActivity) => {
-    if (!lastActivity) return null
-    const text = lastActivity.content?.replace(/^\[Inbound\]\s*/i, '') || ''
-    return text.slice(0, 60) || null
-  }
-
-  const getLastActivityIcon = (lastActivity) => {
-    if (!lastActivity) return null
-    return CHANNEL_CONFIG[lastActivity.type] || CHANNEL_CONFIG.note
+  // Strip [Inbound] prefix for display
+  const getPreview = (raw) => {
+    if (!raw) return null
+    return raw.replace(/^\[Inbound\]\s*/i, '').slice(0, 60) || null
   }
 
   return (
@@ -279,11 +295,15 @@ export default function Conversations() {
             filtered.map(item => {
               const c = item.contact
               const isActive = selected?.id === c.id
-              const lastAct = item.last_activity
-              const preview = getPreview(lastAct)
-              const actConfig = getLastActivityIcon(lastAct)
               const isUnread = !!unreadMap[c.id]
-              const isInbound = lastAct?.content?.startsWith('[Inbound]')
+
+              // Read the correct API fields (NOT item.last_activity)
+              const rawPreview = item.last_message_preview
+              const preview = getPreview(rawPreview)
+              const msgType = item.last_message_type
+              const msgAt = item.last_message_at
+              const isInbound = rawPreview?.startsWith('[Inbound]')
+              const actConfig = msgType ? (CHANNEL_CONFIG[msgType] || CHANNEL_CONFIG.note) : null
 
               return (
                 <button
@@ -300,7 +320,6 @@ export default function Conversations() {
                     }`}>
                       {c.first_name?.[0]}{c.last_name?.[0] || ''}
                     </div>
-                    {/* Unread indicator dot */}
                     {isUnread && (
                       <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-violet-500 border-2 border-gray-950 rounded-full" />
                     )}
@@ -311,17 +330,15 @@ export default function Conversations() {
                       <p className={`text-sm font-medium truncate ${isUnread ? 'text-white' : 'text-gray-200'}`}>
                         {c.first_name} {c.last_name}
                       </p>
-                      {lastAct && (
+                      {msgAt && (
                         <span className="text-gray-600 text-[10px] flex-shrink-0">
-                          <TimeAgo dateString={lastAct.created_at} />
+                          <TimeAgo dateString={msgAt} />
                         </span>
                       )}
                     </div>
-
-                    {/* Last message preview row */}
                     <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
-                      {actConfig && lastAct && (
-                        <div className={`w-3.5 h-3.5 flex-shrink-0 flex items-center justify-center`}>
+                      {actConfig && (
+                        <div className="flex-shrink-0">
                           <actConfig.icon className={`w-3 h-3 ${actConfig.color}`} />
                         </div>
                       )}

@@ -16,19 +16,15 @@ def _normalize_phone(phone: str) -> str:
 
 def _find_contact_by_phone(db: Session, raw_phone: str):
     normalized = _normalize_phone(raw_phone)
-    print(f"DEBUG - Normalized inbound number: {normalized}")
 
     contacts = db.query(Contact).all()
-    print(f"DEBUG - Total contacts in DB: {len(contacts)}")
 
     for contact in contacts:
         if not contact.phone:
             continue
         stored = _normalize_phone(contact.phone)
-        print(f"DEBUG - Comparing with contact: {contact.first_name}, stored normalized: {stored}")
 
         if stored == normalized:
-            print(f"DEBUG - Direct match found: {contact.first_name}")
             return contact
 
         variants = set([normalized])
@@ -47,14 +43,9 @@ def _find_contact_by_phone(db: Session, raw_phone: str):
             stored_variants.add("92" + stored[1:])
             stored_variants.add(stored[1:])
 
-        print(f"DEBUG - Inbound variants: {variants}")
-        print(f"DEBUG - Stored variants: {stored_variants}")
-
         if variants & stored_variants:
-            print(f"DEBUG - Variant match found: {contact.first_name}")
             return contact
 
-    print(f"DEBUG - No contact matched for: {normalized}")
     return None
 
 
@@ -63,8 +54,6 @@ async def twilio_sms_inbound(request: Request, db: Session = Depends(get_db)):
     form = await request.form()
     from_number = form.get("From", "")
     body = form.get("Body", "")
-
-    print(f"DEBUG SMS - From: {from_number}, Body: {body}")
 
     if not from_number or not body:
         return Response(content="<Response/>", media_type="text/xml")
@@ -79,9 +68,6 @@ async def twilio_sms_inbound(request: Request, db: Session = Depends(get_db)):
         )
         db.add(activity)
         db.commit()
-        print(f"DEBUG SMS - Activity saved for: {contact.first_name}")
-    else:
-        print(f"DEBUG SMS - No contact found, message dropped")
 
     return Response(content="<Response/>", media_type="text/xml")
 
@@ -91,8 +77,6 @@ async def twilio_whatsapp_inbound(request: Request, db: Session = Depends(get_db
     form = await request.form()
     from_number = form.get("From", "")
     body = form.get("Body", "")
-
-    print(f"DEBUG WHATSAPP - From: {from_number}, Body: {body}")
 
     if not from_number or not body:
         return Response(content="<Response/>", media_type="text/xml")
@@ -107,8 +91,5 @@ async def twilio_whatsapp_inbound(request: Request, db: Session = Depends(get_db
         )
         db.add(activity)
         db.commit()
-        print(f"DEBUG WHATSAPP - Activity saved for: {contact.first_name}")
-    else:
-        print(f"DEBUG WHATSAPP - No contact found, message dropped")
 
     return Response(content="<Response/>", media_type="text/xml")
