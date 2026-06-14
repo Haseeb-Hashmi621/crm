@@ -1,19 +1,19 @@
 // frontend/src/hooks/useInboundNotifications.jsx
 // Global background poller — mounted in App.jsx, runs on every page
-// Fires a simple toast when a new inbound message arrives on any channel
+// Fires a toast for any new inbound message regardless of which page/chat is open
 
 import { useEffect, useRef, useCallback } from 'react'
 import toast from 'react-hot-toast'
 import api from '../services/api'
 
-// Simple icons as text — no JSX icon components needed
+// Simple channel → toast config
 const CHANNEL_TOAST = {
-  sms:      { icon: '📱', label: 'SMS' },
-  whatsapp: { icon: '💬', label: 'WhatsApp' },
-  email:    { icon: '✉️',  label: 'Email' },
-  note:     { icon: '📝', label: 'Note' },
-  call:     { icon: '📞', label: 'Call' },
-  meeting:  { icon: '🤝', label: 'Meeting' },
+  sms:      { icon: '📱', label: 'New SMS Message' },
+  whatsapp: { icon: '💬', label: 'New WhatsApp Message' },
+  email:    { icon: '✉️',  label: 'New Email' },
+  note:     { icon: '📝', label: 'New Note' },
+  call:     { icon: '📞', label: 'New Call' },
+  meeting:  { icon: '🤝', label: 'New Meeting' },
 }
 
 export default function useInboundNotifications() {
@@ -28,6 +28,7 @@ export default function useInboundNotifications() {
       const conversations = res.data
 
       if (!initializedRef.current) {
+        // Seed seen map with current state — don't toast anything on first load
         conversations.forEach(item => {
           if (item.last_activity) {
             seenRef.current[item.contact.id] = item.last_activity.id
@@ -44,16 +45,16 @@ export default function useInboundNotifications() {
         const lastSeenId = seenRef.current[contact.id]
         if (last_activity.id === lastSeenId) return
 
-        // New activity — update seen map
+        // New activity — update seen map first
         seenRef.current[contact.id] = last_activity.id
 
-        // Only notify for inbound messages
+        // Only notify for inbound messages (not outbound ones we sent)
         if (!last_activity.content?.startsWith('[Inbound]')) return
 
-        const ch = CHANNEL_TOAST[last_activity.type] || { icon: '💬', label: 'Message' }
+        const ch = CHANNEL_TOAST[last_activity.type] || { icon: '🔔', label: 'New Message' }
 
-        toast(`${ch.icon} New ${ch.label} message received`, {
-          duration: 6000,
+        toast(`${ch.icon} ${ch.label}`, {
+          duration: 5000,
           style: {
             background:   '#1f2937',
             color:        '#f9fafb',

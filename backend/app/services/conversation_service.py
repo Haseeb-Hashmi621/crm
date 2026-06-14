@@ -30,11 +30,18 @@ def _get_twilio_client() -> Client:
 
 
 def get_conversations(db: Session, user_id: uuid.UUID) -> List[dict]:
+    """
+    Return all contacts for this user with their most recent activity.
+    Only returns contacts that belong to this user.
+    Sorted by last activity date descending (most recent first).
+    """
     contacts = db.query(Contact).filter(Contact.user_id == user_id).all()
     if not contacts:
         return []
+
     contact_ids = [c.id for c in contacts]
 
+    # Fetch ALL activities for these contacts in one query, ordered newest first
     activities = (
         db.query(Activity)
         .filter(Activity.contact_id.in_(contact_ids))
@@ -42,23 +49,36 @@ def get_conversations(db: Session, user_id: uuid.UUID) -> List[dict]:
         .all()
     )
 
+    # Build map: contact_id -> most recent activity
     latest_by_contact: Dict[uuid.UUID, Activity] = {}
     for a in activities:
         if a.contact_id not in latest_by_contact:
             latest_by_contact[a.contact_id] = a
 
+    # Build result list
     results = []
     for c in contacts:
-        results.append({"contact": c, "last_activity": latest_by_contact.get(c.id)})
+        results.append({
+            "contact": c,
+            "last_activity": latest_by_contact.get(c.id)
+        })
 
+    # Sort: contacts with recent activity first, then by contact creation date
     results.sort(
-        key=lambda r: r["last_activity"].created_at if r["last_activity"] else r["contact"].created_at,
+        key=lambda r: (
+            r["last_activity"].created_at if r["last_activity"] else r["contact"].created_at
+        ),
         reverse=True
     )
+
     return results
 
 
 def get_conversation_thread(db: Session, user_id: uuid.UUID, contact_id: str) -> Optional[dict]:
+    """
+    Return full message thread for a contact.
+    Verifies the contact belongs to the current user.
+    """
     contact = db.query(Contact).filter(
         Contact.id == contact_id, Contact.user_id == user_id
     ).first()
@@ -79,6 +99,9 @@ def send_message(
     db: Session, user_id: uuid.UUID, contact_id: str,
     channel: str, content: str, subject: Optional[str] = None
 ) -> dict:
+    """
+    Send a message to a contact via the specified channel and log it as an activity.
+    """
     contact = db.query(Contact).filter(
         Contact.id == contact_id, Contact.user_id == user_id
     ).first()
@@ -141,6 +164,7 @@ def send_message(
     else:
         return {"error": "Invalid channel"}
 
+    # Log as activity regardless of channel
     activity = Activity(
         contact_id=contact.id,
         type=channel,

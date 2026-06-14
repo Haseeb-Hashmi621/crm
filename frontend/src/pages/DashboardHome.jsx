@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Users, TrendingUp, DollarSign, Activity, MessageSquare, PhoneCall, Send, Calendar } from 'lucide-react'
+import { Users, TrendingUp, DollarSign, Activity, MessageSquare, PhoneCall, Send, Calendar, Phone, MessageCircle } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import api from '../services/api'
 
@@ -9,6 +9,8 @@ const ACTIVITY_TYPE_CONFIG = {
   call: { icon: PhoneCall, color: 'text-green-400', bg: 'bg-green-500/10', label: 'Call' },
   email: { icon: Send, color: 'text-blue-400', bg: 'bg-blue-500/10', label: 'Email' },
   meeting: { icon: Calendar, color: 'text-orange-400', bg: 'bg-orange-500/10', label: 'Meeting' },
+  sms: { icon: Phone, color: 'text-cyan-400', bg: 'bg-cyan-500/10', label: 'SMS' },
+  whatsapp: { icon: MessageCircle, color: 'text-emerald-400', bg: 'bg-emerald-500/10', label: 'WhatsApp' },
 }
 
 const FILTER_OPTIONS = [
@@ -17,6 +19,8 @@ const FILTER_OPTIONS = [
   { id: 'call', label: 'Calls', color: 'text-green-400' },
   { id: 'email', label: 'Emails', color: 'text-blue-400' },
   { id: 'meeting', label: 'Meetings', color: 'text-orange-400' },
+  { id: 'sms', label: 'SMS', color: 'text-cyan-400' },
+  { id: 'whatsapp', label: 'WhatsApp', color: 'text-emerald-400' },
 ]
 
 function TimeAgo({ dateString }) {
@@ -207,6 +211,8 @@ export default function DashboardHome() {
                   const config = ACTIVITY_TYPE_CONFIG[activity.type] || ACTIVITY_TYPE_CONFIG.note
                   const Icon = config.icon
                   const contactName = `${activity.contact?.first_name || ''} ${activity.contact?.last_name || ''}`.trim()
+                  // Strip [Inbound] prefix for display
+                  const displayContent = activity.content?.replace(/^\[Inbound\]\s*/i, '') || ''
 
                   return (
                     <motion.div
@@ -238,7 +244,7 @@ export default function DashboardHome() {
                             <TimeAgo dateString={activity.created_at} />
                           </span>
                         </div>
-                        <p className="text-gray-400 text-sm truncate">{activity.content}</p>
+                        <p className="text-gray-400 text-sm truncate">{displayContent}</p>
                       </div>
                     </motion.div>
                   )

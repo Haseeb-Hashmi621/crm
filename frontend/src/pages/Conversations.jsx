@@ -57,53 +57,76 @@ export default function Conversations() {
   const [content, setContent] = useState('')
   const [sending, setSending] = useState(false)
 
+  // Track which contacts have unread messages
+  // key: contact.id, value: last seen activity id when we opened that chat
+  const [unreadMap, setUnreadMap] = useState({})
+  // Track last known activity id per contact (from sidebar polling)
+  const lastKnownActivityRef = useRef({})
+
   const threadEndRef = useRef(null)
   const selectedRef = useRef(null)
-  const conversationsRef = useRef([])
-  const threadRef = useRef(null)
 
-  // Keep refs in sync
+  // Keep selectedRef in sync so polling callbacks always see current selected
   useEffect(() => { selectedRef.current = selected }, [selected])
-  useEffect(() => { conversationsRef.current = conversations }, [conversations])
-  useEffect(() => { threadRef.current = thread }, [thread])
 
   useEffect(() => { fetchConversations() }, [])
 
   useEffect(() => {
-    if (selected) fetchThread(selected.id)
+    if (selected) {
+      fetchThread(selected.id)
+      // Mark as read when opening a chat
+      setUnreadMap(prev => ({ ...prev, [selected.id]: true }))
+    }
   }, [selected])
 
   useEffect(() => {
     threadEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [thread])
 
-  // Poll active thread every 5 seconds — detect new inbound messages and toast
+  // Poll conversation list every 5 seconds to update sidebar previews + unread dots
   useEffect(() => {
     const interval = setInterval(async () => {
-      const currentSelected = selectedRef.current
-      if (!currentSelected) return
       try {
-        const res = await api.get(`/conversations/${currentSelected.id}`)
-        const newThread = res.data
-        const oldMessages = threadRef.current?.messages || []
-        const newMessages = newThread?.messages || []
+        const res = await api.get('/conversations/')
+        const newConvos = res.data
 
-        // Detect truly new inbound messages
-        if (newMessages.length > oldMessages.length) {
-          const added = newMessages.slice(oldMessages.length)
-          added.forEach(msg => {
-            if (msg.content.startsWith('[Inbound]')) {
-              const preview = msg.content.replace(/^\[Inbound\]\s*/, '').slice(0, 60)
-              const label = CHANNEL_CONFIG[msg.type]?.label || msg.type
-              toast(`↙ New ${label} from ${currentSelected.first_name}: "${preview}"`, {
-                icon: '💬',
-                duration: 5000,
-              })
+        setConversations(prev => {
+          // Detect new inbound messages per contact
+          const newUnread = {}
+          newConvos.forEach(item => {
+            const contactId = item.contact.id
+            const newLastId = item.last_activity?.id
+            const prevLastId = lastKnownActivityRef.current[contactId]
+
+            if (newLastId && newLastId !== prevLastId) {
+              const isInbound = item.last_activity?.content?.startsWith('[Inbound]')
+              const isCurrentChat = selectedRef.current?.id === contactId
+
+              // Mark unread if it's inbound and NOT currently viewing this chat
+              if (isInbound && !isCurrentChat) {
+                newUnread[contactId] = true
+              }
+
+              lastKnownActivityRef.current[contactId] = newLastId
             }
           })
-        }
 
-        setThread(newThread)
+          if (Object.keys(newUnread).length > 0) {
+            setUnreadMap(prev => ({ ...prev, ...newUnread }))
+          }
+
+          return newConvos
+        })
+
+        // Also refresh thread if we're in an active chat
+        const currentSelected = selectedRef.current
+        if (currentSelected) {
+          const updated = newConvos.find(c => c.contact.id === currentSelected.id)
+          if (updated) {
+            // Silently refresh the thread for active chat
+            fetchThread(currentSelected.id, true)
+          }
+        }
       } catch (err) {
         // silent fail
       }
@@ -111,25 +134,22 @@ export default function Conversations() {
     return () => clearInterval(interval)
   }, [])
 
-  // Poll conversation list every 8 seconds to update sidebar previews
-  useEffect(() => {
-    const interval = setInterval(async () => {
-      try {
-        const res = await api.get('/conversations/')
-        setConversations(res.data)
-      } catch (err) {
-        // silent fail
-      }
-    }, 8000)
-    return () => clearInterval(interval)
-  }, [])
-
   const fetchConversations = async () => {
     try {
       const res = await api.get('/conversations/')
-      setConversations(res.data)
-      if (!selectedRef.current && res.data.length > 0) {
-        setSelected(res.data[0].contact)
+      const convos = res.data
+      setConversations(convos)
+
+      // Seed the last known activity map
+      convos.forEach(item => {
+        if (item.last_activity) {
+          lastKnownActivityRef.current[item.contact.id] = item.last_activity.id
+        }
+      })
+
+      // Auto-select first conversation
+      if (!selectedRef.current && convos.length > 0) {
+        setSelected(convos[0].contact)
       }
     } catch (err) {
       console.error(err)
@@ -138,16 +158,26 @@ export default function Conversations() {
     }
   }
 
-  const fetchThread = async (contactId) => {
-    setLoadingThread(true)
+  const fetchThread = async (contactId, silent = false) => {
+    if (!silent) setLoadingThread(true)
     try {
       const res = await api.get(`/conversations/${contactId}`)
       setThread(res.data)
     } catch (err) {
-      toast.error('Failed to load conversation')
+      if (!silent) toast.error('Failed to load conversation')
     } finally {
-      setLoadingThread(false)
+      if (!silent) setLoadingThread(false)
     }
+  }
+
+  const handleSelectContact = (contact) => {
+    setSelected(contact)
+    // Clear unread for this contact
+    setUnreadMap(prev => {
+      const next = { ...prev }
+      delete next[contact.id]
+      return next
+    })
   }
 
   const handleSend = async () => {
@@ -158,17 +188,17 @@ export default function Conversations() {
       if (channel === 'email' && subject.trim()) payload.subject = subject.trim()
 
       const res = await api.post(`/conversations/${selected.id}/send`, payload)
-      setThread(prev => ({ ...prev, messages: [...(prev?.messages || []), res.data.message] }))
+      const newMessage = res.data.message
+
+      // Add to thread
+      setThread(prev => ({ ...prev, messages: [...(prev?.messages || []), newMessage] }))
       setContent('')
       setSubject('')
 
-      // update sidebar preview immediately after sending
+      // Update sidebar preview immediately
       setConversations(prev => {
         const updated = prev.map(c => c.contact.id === selected.id
-          ? {
-              ...c,
-              last_activity: res.data.message,
-            }
+          ? { ...c, last_activity: newMessage }
           : c)
         return updated.sort((a, b) => {
           const ta = a.last_activity?.created_at ? new Date(a.last_activity.created_at) : 0
@@ -177,7 +207,14 @@ export default function Conversations() {
         })
       })
 
-      toast.success(channel === 'note' || channel === 'call' || channel === 'meeting' ? 'Logged!' : 'Message sent!')
+      // Update last known activity ref
+      lastKnownActivityRef.current[selected.id] = newMessage.id
+
+      toast.success(
+        channel === 'note' || channel === 'call' || channel === 'meeting'
+          ? 'Logged!'
+          : 'Message sent!'
+      )
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to send')
     } finally {
@@ -196,6 +233,18 @@ export default function Conversations() {
     if (ch === 'email') return !!selected.email
     if (ch === 'sms' || ch === 'whatsapp') return !!selected.phone
     return true
+  }
+
+  // Format last message preview — strip [Inbound] prefix
+  const getPreview = (lastActivity) => {
+    if (!lastActivity) return null
+    const text = lastActivity.content?.replace(/^\[Inbound\]\s*/i, '') || ''
+    return text.slice(0, 60) || null
+  }
+
+  const getLastActivityIcon = (lastActivity) => {
+    if (!lastActivity) return null
+    return CHANNEL_CONFIG[lastActivity.type] || CHANNEL_CONFIG.note
   }
 
   return (
@@ -231,33 +280,58 @@ export default function Conversations() {
               const c = item.contact
               const isActive = selected?.id === c.id
               const lastAct = item.last_activity
+              const preview = getPreview(lastAct)
+              const actConfig = getLastActivityIcon(lastAct)
+              const isUnread = !!unreadMap[c.id]
+              const isInbound = lastAct?.content?.startsWith('[Inbound]')
+
               return (
                 <button
                   key={c.id}
-                  onClick={() => setSelected(c)}
+                  onClick={() => handleSelectContact(c)}
                   className={`w-full text-left px-4 py-3 border-b border-gray-800/60 transition-colors flex items-center gap-3 ${
                     isActive ? 'bg-gray-800' : 'hover:bg-gray-800/50'
                   }`}
                 >
-                  <div className="w-9 h-9 bg-violet-600 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                    {c.first_name?.[0]}{c.last_name?.[0] || ''}
+                  {/* Avatar with unread dot */}
+                  <div className="relative flex-shrink-0">
+                    <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold ${
+                      isActive ? 'bg-violet-500' : 'bg-violet-600'
+                    }`}>
+                      {c.first_name?.[0]}{c.last_name?.[0] || ''}
+                    </div>
+                    {/* Unread indicator dot */}
+                    {isUnread && (
+                      <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-violet-500 border-2 border-gray-950 rounded-full" />
+                    )}
                   </div>
+
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
-                      <p className="text-white text-sm font-medium truncate">{c.first_name} {c.last_name}</p>
+                      <p className={`text-sm font-medium truncate ${isUnread ? 'text-white' : 'text-gray-200'}`}>
+                        {c.first_name} {c.last_name}
+                      </p>
                       {lastAct && (
                         <span className="text-gray-600 text-[10px] flex-shrink-0">
                           <TimeAgo dateString={lastAct.created_at} />
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      {lastAct && <ChannelBadge type={lastAct.type} />}
-                      <p className="text-gray-500 text-xs truncate">
-                        {lastAct
-                          ? lastAct.content.replace(/^\[Inbound\]\s*/, '').slice(0, 60)
-                          : 'No messages yet'}
-                      </p>
+
+                    {/* Last message preview row */}
+                    <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
+                      {actConfig && lastAct && (
+                        <div className={`w-3.5 h-3.5 flex-shrink-0 flex items-center justify-center`}>
+                          <actConfig.icon className={`w-3 h-3 ${actConfig.color}`} />
+                        </div>
+                      )}
+                      {preview ? (
+                        <p className={`text-xs truncate ${isUnread ? 'text-gray-300 font-medium' : 'text-gray-500'}`}>
+                          {isInbound ? '' : '↗ '}{preview}
+                        </p>
+                      ) : (
+                        <p className="text-gray-600 text-xs italic">No messages yet</p>
+                      )}
                     </div>
                   </div>
                 </button>
