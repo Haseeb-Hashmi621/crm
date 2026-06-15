@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search, Send, Loader2, MessageSquare, PhoneCall, Mail,
   Users as UsersIcon, MessageCircle, Phone as PhoneIcon,
-  ChevronLeft, Sparkles, X, CheckCircle2
+  ChevronLeft, Sparkles, X, CheckCircle2, FileText, Tag,
+  ChevronDown, ChevronUp, Check
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import api from '../services/api'
@@ -60,12 +61,21 @@ export default function Conversations() {
   const [sending, setSending]               = useState(false)
 
   // AI smart reply state
-  const [aiSuggestions, setAiSuggestions]   = useState([])
-  const [aiLoading, setAiLoading]           = useState(false)
-  // Track which contact the suggestions belong to — prevents stale chips on fast switch
-  const [aiSuggestionsFor, setAiSuggestionsFor] = useState(null)
+  const [aiSuggestions, setAiSuggestions]         = useState([])
+  const [aiLoading, setAiLoading]                 = useState(false)
+  const [aiSuggestionsFor, setAiSuggestionsFor]   = useState(null)
 
-  // unreadMap: contactId -> true means there is an unread inbound message
+  // AI summary + tagging state
+  const [summaryOpen, setSummaryOpen]             = useState(false)
+  const [summaryLoading, setSummaryLoading]       = useState(false)
+  const [summaryData, setSummaryData]             = useState(null)   // { summary, suggested_tags }
+  const [summaryFor, setSummaryFor]               = useState(null)   // contact id
+  const [pendingTags, setPendingTags]             = useState([])     // tags agent hasn't accepted/rejected yet
+  const [acceptedTags, setAcceptedTags]           = useState([])     // tags agent approved
+  const [rejectedTags, setRejectedTags]           = useState([])     // tags agent dismissed
+  const [savingTags, setSavingTags]               = useState(false)
+
+  // unreadMap: contactId -> true
   const [unreadMap, setUnreadMap]           = useState({})
 
   const threadEndRef      = useRef(null)
@@ -82,9 +92,15 @@ export default function Conversations() {
 
   useEffect(() => {
     if (selected) fetchThread(selected.id)
-    // Clear AI suggestions immediately when switching contacts
+    // Clear AI state on contact switch
     setAiSuggestions([])
     setAiSuggestionsFor(null)
+    setSummaryOpen(false)
+    setSummaryData(null)
+    setSummaryFor(null)
+    setPendingTags([])
+    setAcceptedTags([])
+    setRejectedTags([])
   }, [selected])
 
   useEffect(() => {
@@ -120,7 +136,6 @@ export default function Conversations() {
             }
           })
         }
-
         setThread(newThread)
       } catch {
         // silent fail
@@ -140,16 +155,12 @@ export default function Conversations() {
         newConvos.forEach(item => {
           const contactId = item.contact?.id
           if (!contactId) return
-
           const preview = item.last_message_preview ?? null
           const prevPreview = lastPreviewRef.current[contactId]
-
           if (preview && preview !== prevPreview) {
             lastPreviewRef.current[contactId] = preview
-
             const isInbound = preview.startsWith('[Inbound]')
             const isCurrentChat = selectedRef.current?.id === contactId
-
             if (isInbound && !isCurrentChat) {
               newUnread[contactId] = true
             }
@@ -159,7 +170,6 @@ export default function Conversations() {
         if (Object.keys(newUnread).length > 0) {
           setUnreadMap(prev => ({ ...prev, ...newUnread }))
         }
-
         setConversations(newConvos)
       } catch {
         // silent fail
@@ -168,7 +178,7 @@ export default function Conversations() {
     return () => clearInterval(interval)
   }, [])
 
-  // Esc key — deselect current conversation (like WhatsApp)
+  // Esc key — deselect current conversation
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape' && selectedRef.current) {
@@ -186,14 +196,12 @@ export default function Conversations() {
       const res = await api.get('/conversations/')
       const convos = res.data
       setConversations(convos)
-
       convos.forEach(item => {
         const contactId = item.contact?.id
         if (contactId) {
           lastPreviewRef.current[contactId] = item.last_message_preview ?? null
         }
       })
-
       if (!selectedRef.current && convos.length > 0) {
         setSelected(convos[0].contact)
       }
@@ -225,7 +233,8 @@ export default function Conversations() {
     })
   }
 
-  // AI smart reply handler
+  // ── AI Smart Reply ──────────────────────────────────────────────────────────
+
   const handleAiReply = async () => {
     if (!selected || !thread?.messages?.length) return
     const contactId = selected.id
@@ -241,7 +250,6 @@ export default function Conversations() {
           created_at: m.created_at,
         }))
       })
-      // Only apply if user hasn't switched to a different contact mid-request
       if (selectedRef.current?.id === contactId) {
         setAiSuggestions(res.data.suggestions || [])
         setAiSuggestionsFor(contactId)
@@ -253,17 +261,12 @@ export default function Conversations() {
     }
   }
 
-  // Clicking a suggestion chip populates the textarea
-  // Auto-switches to the best outbound channel based on conversation history
   const handlePickSuggestion = (suggestion) => {
     setContent(suggestion)
     setAiSuggestions([])
     setAiSuggestionsFor(null)
-
-    // Auto-switch: find the most recent inbound channel and use that
     if (channel === 'note' || channel === 'call' || channel === 'meeting') {
       const messages = thread?.messages || []
-      // Walk backwards to find most recent inbound message channel
       const lastInbound = [...messages].reverse().find(m => m.content.startsWith('[Inbound]'))
       if (lastInbound?.type === 'whatsapp' && selected?.phone) {
         setChannel('whatsapp')
@@ -272,6 +275,85 @@ export default function Conversations() {
       }
     }
   }
+
+  // ── AI Summarize ────────────────────────────────────────────────────────────
+
+  const handleSummarize = async () => {
+    if (!selected || !thread?.messages?.length) return
+    const contactId = selected.id
+
+    // If summary already loaded for this contact, just toggle panel
+    if (summaryFor === contactId && summaryData) {
+      setSummaryOpen(prev => !prev)
+      return
+    }
+
+    setSummaryLoading(true)
+    setSummaryOpen(true)
+    setSummaryData(null)
+    setPendingTags([])
+    setAcceptedTags([])
+    setRejectedTags([])
+
+    try {
+      const res = await api.post('/ai/summarize', {
+        contact_name: `${selected.first_name} ${selected.last_name || ''}`.trim(),
+        messages: thread.messages.map(m => ({
+          type: m.type,
+          content: m.content,
+          created_at: m.created_at,
+        }))
+      })
+      if (selectedRef.current?.id === contactId) {
+        setSummaryData(res.data)
+        setSummaryFor(contactId)
+        setPendingTags(res.data.suggested_tags || [])
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Summary failed')
+      setSummaryOpen(false)
+    } finally {
+      setSummaryLoading(false)
+    }
+  }
+
+  const handleAcceptTag = (tag) => {
+    setPendingTags(prev => prev.filter(t => t !== tag))
+    setAcceptedTags(prev => [...prev, tag])
+  }
+
+  const handleRejectTag = (tag) => {
+    setPendingTags(prev => prev.filter(t => t !== tag))
+    setRejectedTags(prev => [...prev, tag])
+  }
+
+  const handleUndoTag = (tag) => {
+    setAcceptedTags(prev => prev.filter(t => t !== tag))
+    setRejectedTags(prev => prev.filter(t => t !== tag))
+    setPendingTags(prev => [...prev, tag])
+  }
+
+  const handleSaveTags = async () => {
+    if (!acceptedTags.length || !selected) return
+    setSavingTags(true)
+    try {
+      for (const tagName of acceptedTags) {
+        // Create the tag
+        const tagRes = await api.post('/tags/', { name: tagName })
+        const tagId = tagRes.data.id
+        // Assign it to the contact
+        await api.post(`/tags/contacts/${selected.id}/add/${tagId}`)
+      }
+      toast.success(`${acceptedTags.length} tag${acceptedTags.length > 1 ? 's' : ''} saved!`)
+      setAcceptedTags([])
+    } catch (err) {
+      toast.error('Failed to save tags')
+    } finally {
+      setSavingTags(false)
+    }
+  }
+
+  // ── Send message ────────────────────────────────────────────────────────────
 
   const handleSend = async () => {
     if (!selected || !content.trim()) return
@@ -316,6 +398,8 @@ export default function Conversations() {
     }
   }
 
+  // ── Helpers ─────────────────────────────────────────────────────────────────
+
   const filtered = conversations.filter(c => {
     const c_ = c.contact
     const q = search.toLowerCase()
@@ -334,8 +418,9 @@ export default function Conversations() {
     return raw.replace(/^\[Inbound\]\s*/i, '').slice(0, 60) || null
   }
 
-  // Only show suggestions if they belong to the currently selected contact
   const visibleSuggestions = aiSuggestionsFor === selected?.id ? aiSuggestions : []
+
+  // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
     <div className="h-screen flex">
@@ -370,7 +455,6 @@ export default function Conversations() {
               const c = item.contact
               const isActive = selected?.id === c.id
               const isUnread = !!unreadMap[c.id]
-
               const rawPreview = item.last_message_preview
               const preview = getPreview(rawPreview)
               const msgType = item.last_message_type
@@ -396,7 +480,6 @@ export default function Conversations() {
                       <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-violet-500 border-2 border-gray-950 rounded-full" />
                     )}
                   </div>
-
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
                       <p className={`text-sm font-medium truncate ${isUnread ? 'text-white' : 'text-gray-200'}`}>
@@ -442,27 +525,159 @@ export default function Conversations() {
         ) : (
           <>
             {/* Header */}
-            <div className="p-4 border-b border-gray-800 flex items-center gap-3">
-              <button onClick={() => setSelected(null)} className="lg:hidden text-gray-500 hover:text-white">
-                <ChevronLeft className="w-5 h-5" />
-              </button>
-              <button
-                onClick={() => navigate(`/dashboard/contacts/${selected.id}`)}
-                className="flex items-center gap-3 min-w-0 text-left group"
-                title="View contact details"
-              >
-                <div className="w-9 h-9 bg-violet-600 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 group-hover:ring-2 group-hover:ring-violet-400/50 transition-all">
-                  {selected.first_name?.[0]}{selected.last_name?.[0] || ''}
-                </div>
-                <div className="min-w-0">
-                  <p className="text-white font-medium text-sm truncate group-hover:text-violet-300 transition-colors">
-                    {selected.first_name} {selected.last_name}
-                  </p>
-                  <p className="text-gray-500 text-xs truncate">
-                    {[selected.email, selected.phone, selected.company].filter(Boolean).join(' · ') || 'No contact details'}
-                  </p>
-                </div>
-              </button>
+            <div className="border-b border-gray-800">
+              <div className="p-4 flex items-center gap-3">
+                <button onClick={() => setSelected(null)} className="lg:hidden text-gray-500 hover:text-white">
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={() => navigate(`/dashboard/contacts/${selected.id}`)}
+                  className="flex items-center gap-3 min-w-0 text-left group flex-1"
+                  title="View contact details"
+                >
+                  <div className="w-9 h-9 bg-violet-600 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 group-hover:ring-2 group-hover:ring-violet-400/50 transition-all">
+                    {selected.first_name?.[0]}{selected.last_name?.[0] || ''}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-white font-medium text-sm truncate group-hover:text-violet-300 transition-colors">
+                      {selected.first_name} {selected.last_name}
+                    </p>
+                    <p className="text-gray-500 text-xs truncate">
+                      {[selected.email, selected.phone, selected.company].filter(Boolean).join(' · ') || 'No contact details'}
+                    </p>
+                  </div>
+                </button>
+
+                {/* Summarize button */}
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={handleSummarize}
+                  disabled={summaryLoading || !thread?.messages?.length}
+                  title={!thread?.messages?.length ? 'No messages to summarize' : 'AI summary & tag suggestions'}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border flex-shrink-0 ${
+                    summaryOpen
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                      : 'bg-gray-800 text-gray-400 border-gray-700 hover:text-white hover:border-gray-600'
+                  } disabled:opacity-40 disabled:cursor-not-allowed`}
+                >
+                  {summaryLoading
+                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    : <FileText className="w-3.5 h-3.5" />
+                  }
+                  {summaryLoading ? 'Summarizing...' : summaryOpen ? 'Hide Summary' : 'Summarize'}
+                  {!summaryLoading && (summaryOpen
+                    ? <ChevronUp className="w-3 h-3" />
+                    : <ChevronDown className="w-3 h-3" />
+                  )}
+                </motion.button>
+              </div>
+
+              {/* Summary Panel */}
+              <AnimatePresence>
+                {summaryOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="px-4 pb-4 border-t border-gray-800/60">
+                      {summaryLoading ? (
+                        <div className="flex items-center gap-2 py-3 text-gray-500 text-sm">
+                          <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+                          Generating summary and tag suggestions...
+                        </div>
+                      ) : summaryData ? (
+                        <div className="pt-3 space-y-3">
+                          {/* Summary text */}
+                          <div className="flex gap-2">
+                            <FileText className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0 mt-0.5" />
+                            <p className="text-gray-300 text-sm leading-relaxed">{summaryData.summary}</p>
+                          </div>
+
+                          {/* Tag review */}
+                          {(pendingTags.length > 0 || acceptedTags.length > 0 || rejectedTags.length > 0) && (
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-1.5">
+                                <Tag className="w-3 h-3 text-gray-500" />
+                                <span className="text-xs text-gray-500 font-medium">Suggested tags — accept or dismiss each:</span>
+                              </div>
+
+                              <div className="flex flex-wrap gap-2">
+                                {/* Pending tags — awaiting decision */}
+                                {pendingTags.map(tag => (
+                                  <div key={tag} className="flex items-center gap-1 bg-gray-800 border border-gray-700 rounded-full pl-3 pr-1 py-1">
+                                    <span className="text-xs text-gray-300">{tag}</span>
+                                    <button
+                                      onClick={() => handleAcceptTag(tag)}
+                                      className="w-5 h-5 rounded-full bg-emerald-500/20 hover:bg-emerald-500/40 flex items-center justify-center transition-colors"
+                                      title="Accept tag"
+                                    >
+                                      <Check className="w-2.5 h-2.5 text-emerald-400" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleRejectTag(tag)}
+                                      className="w-5 h-5 rounded-full bg-red-500/20 hover:bg-red-500/40 flex items-center justify-center transition-colors"
+                                      title="Dismiss tag"
+                                    >
+                                      <X className="w-2.5 h-2.5 text-red-400" />
+                                    </button>
+                                  </div>
+                                ))}
+
+                                {/* Accepted tags */}
+                                {acceptedTags.map(tag => (
+                                  <button
+                                    key={tag}
+                                    onClick={() => handleUndoTag(tag)}
+                                    title="Click to undo"
+                                    className="flex items-center gap-1 bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 rounded-full px-3 py-1 text-xs hover:bg-emerald-500/10 transition-colors"
+                                  >
+                                    <Check className="w-2.5 h-2.5" />
+                                    {tag}
+                                  </button>
+                                ))}
+
+                                {/* Rejected tags — faded, click to undo */}
+                                {rejectedTags.map(tag => (
+                                  <button
+                                    key={tag}
+                                    onClick={() => handleUndoTag(tag)}
+                                    title="Click to undo"
+                                    className="flex items-center gap-1 bg-gray-800/40 border border-gray-700/40 text-gray-600 rounded-full px-3 py-1 text-xs line-through hover:text-gray-400 transition-colors"
+                                  >
+                                    {tag}
+                                  </button>
+                                ))}
+                              </div>
+
+                              {/* Save accepted tags button */}
+                              {acceptedTags.length > 0 && (
+                                <motion.button
+                                  initial={{ opacity: 0, y: 4 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  whileTap={{ scale: 0.97 }}
+                                  onClick={handleSaveTags}
+                                  disabled={savingTags}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-lg text-xs font-medium transition-colors"
+                                >
+                                  {savingTags
+                                    ? <Loader2 className="w-3 h-3 animate-spin" />
+                                    : <Tag className="w-3 h-3" />
+                                  }
+                                  {savingTags ? 'Saving...' : `Save ${acceptedTags.length} tag${acceptedTags.length > 1 ? 's' : ''} to contact`}
+                                </motion.button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ) : null}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
             {/* Thread messages */}
