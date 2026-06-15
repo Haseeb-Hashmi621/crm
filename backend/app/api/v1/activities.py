@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
+from app.models.activity import Activity
 from app.schemas.activity import ActivityCreate, ActivityResponse, ActivityWithContact
 from app.services.activity_service import (
     get_activities_by_contact, get_activities_by_deal,
@@ -11,6 +13,15 @@ from app.services.activity_service import (
 from typing import List
 
 router = APIRouter()
+
+@router.get("/count")
+def get_activities_count(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Returns the exact total count of all activities — no cap, no pagination."""
+    total = db.query(func.count(Activity.id)).scalar()
+    return {"total": total}
 
 @router.get("/contact/{contact_id}", response_model=List[ActivityResponse])
 def list_contact_activities(

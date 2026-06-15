@@ -4,23 +4,28 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, Mail, Phone, Building2, Calendar,
   MessageSquare, PhoneCall, Send, Users,
-  Plus, Trash2, Loader2, Edit2, X, Check
+  Plus, Trash2, Loader2, Edit2, X, Check, MessageCircle
 } from 'lucide-react'
 import api from '../services/api'
 import toast from 'react-hot-toast'
 
+// ALL 6 activity types — note, call, email, meeting, sms, whatsapp
 const ACTIVITY_TYPES = [
-  { id: 'note', label: 'Note', icon: MessageSquare, color: 'text-violet-400', bg: 'bg-violet-500/10', border: 'border-violet-500/30' },
-  { id: 'call', label: 'Call', icon: PhoneCall, color: 'text-green-400', bg: 'bg-green-500/10', border: 'border-green-500/30' },
-  { id: 'email', label: 'Email', icon: Send, color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/30' },
-  { id: 'meeting', label: 'Meeting', icon: Users, color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/30' },
+  { id: 'note',     label: 'Note',      icon: MessageSquare, color: 'text-violet-400',  bg: 'bg-violet-500/10',  border: 'border-violet-500/30' },
+  { id: 'call',     label: 'Call',      icon: PhoneCall,     color: 'text-green-400',   bg: 'bg-green-500/10',   border: 'border-green-500/30' },
+  { id: 'email',    label: 'Email',     icon: Send,          color: 'text-blue-400',    bg: 'bg-blue-500/10',    border: 'border-blue-500/30' },
+  { id: 'meeting',  label: 'Meeting',   icon: Users,         color: 'text-orange-400',  bg: 'bg-orange-500/10',  border: 'border-orange-500/30' },
+  { id: 'sms',      label: 'SMS',       icon: Phone,         color: 'text-cyan-400',    bg: 'bg-cyan-500/10',    border: 'border-cyan-500/30' },
+  { id: 'whatsapp', label: 'WhatsApp',  icon: MessageCircle, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30' },
 ]
+
+// Only these 4 are available in the Log Activity composer
+const LOG_TYPES = ACTIVITY_TYPES.filter(t => ['note', 'call', 'email', 'meeting'].includes(t.id))
 
 function TimeAgo({ dateString }) {
   const date = new Date(dateString)
   const now = new Date()
   const diff = Math.floor((now - date) / 1000)
-
   if (diff < 60) return <span>{diff}s ago</span>
   if (diff < 3600) return <span>{Math.floor(diff / 60)}m ago</span>
   if (diff < 86400) return <span>{Math.floor(diff / 3600)}h ago</span>
@@ -206,18 +211,18 @@ export default function ContactDetail() {
                     <span className="text-gray-300">{contact.company}</span>
                   </div>
                 )}
-                <div className="flex items-center gap-3 text-sm">
-                  <Calendar className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                  <span className="text-gray-500 text-xs">
-                    {activities.length} activities logged
-                  </span>
-                </div>
-
+                {contact?.created_at && (
+                  <div className="flex items-center gap-3 text-sm">
+                    <Calendar className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                    <span className="text-gray-500 text-xs">
+                      {activities.length} activities logged
+                    </span>
+                  </div>
+                )}
                 <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
+                  whileTap={{ scale: 0.97 }}
                   onClick={() => setEditing(true)}
-                  className="w-full mt-4 flex items-center justify-center gap-2 py-2 rounded-xl border border-gray-700 text-gray-400 hover:text-white hover:border-gray-600 transition-colors text-sm"
+                  className="w-full mt-2 flex items-center justify-center gap-2 py-2 rounded-xl border border-gray-700 text-gray-400 hover:text-white hover:border-gray-600 text-sm transition-colors"
                 >
                   <Edit2 className="w-3.5 h-3.5" />
                   Edit Contact
@@ -262,13 +267,14 @@ export default function ContactDetail() {
             )}
           </div>
 
-          {/* Quick stats */}
+          {/* Quick stats — all 6 types */}
           <div className="mt-4 grid grid-cols-2 gap-3">
             {ACTIVITY_TYPES.map(type => {
               const count = activities.filter(a => a.type === type.id).length
+              if (count === 0) return null  // hide types with no activity for this contact
               const Icon = type.icon
               return (
-                <div key={type.id} className={`bg-gray-900 border border-gray-800 rounded-xl p-3 flex items-center gap-2`}>
+                <div key={type.id} className="bg-gray-900 border border-gray-800 rounded-xl p-3 flex items-center gap-2">
                   <div className={`w-7 h-7 rounded-lg ${type.bg} flex items-center justify-center`}>
                     <Icon className={`w-3.5 h-3.5 ${type.color}`} />
                   </div>
@@ -293,9 +299,9 @@ export default function ContactDetail() {
           <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 mb-5">
             <p className="text-white text-sm font-medium mb-3">Log Activity</p>
 
-            {/* Type selector */}
+            {/* Type selector — only note/call/email/meeting (not sms/whatsapp, those come via Twilio) */}
             <div className="flex gap-2 mb-3">
-              {ACTIVITY_TYPES.map(type => {
+              {LOG_TYPES.map(type => {
                 const Icon = type.icon
                 const isActive = activeType === type.id
                 return (
@@ -365,6 +371,9 @@ export default function ContactDetail() {
                 <AnimatePresence>
                   {activities.map((activity, i) => {
                     const typeInfo = ACTIVITY_TYPES.find(t => t.id === activity.type) || ACTIVITY_TYPES[0]
+                    const isInbound = activity.content?.startsWith('[Inbound]')
+                    const displayContent = activity.content?.replace(/^\[Inbound\]\s*/i, '') || ''
+
                     return (
                       <motion.div
                         key={activity.id}
@@ -387,7 +396,7 @@ export default function ContactDetail() {
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex items-center gap-2 mb-1">
                               <span className={`text-xs font-semibold uppercase tracking-wide ${typeInfo.color}`}>
-                                {typeInfo.label}
+                                {isInbound ? `↙ ${typeInfo.label}` : typeInfo.label}
                               </span>
                               <span className="text-gray-600 text-xs">
                                 <TimeAgo dateString={activity.created_at} />
@@ -402,7 +411,7 @@ export default function ContactDetail() {
                             </motion.button>
                           </div>
                           <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-wrap">
-                            {activity.content}
+                            {displayContent}
                           </p>
                         </div>
                       </motion.div>

@@ -5,21 +5,21 @@ import { useNavigate } from 'react-router-dom'
 import api from '../services/api'
 
 const ACTIVITY_TYPE_CONFIG = {
-  note: { icon: MessageSquare, color: 'text-violet-400', bg: 'bg-violet-500/10', label: 'Note' },
-  call: { icon: PhoneCall, color: 'text-green-400', bg: 'bg-green-500/10', label: 'Call' },
-  email: { icon: Send, color: 'text-blue-400', bg: 'bg-blue-500/10', label: 'Email' },
-  meeting: { icon: Calendar, color: 'text-orange-400', bg: 'bg-orange-500/10', label: 'Meeting' },
-  sms: { icon: Phone, color: 'text-cyan-400', bg: 'bg-cyan-500/10', label: 'SMS' },
+  note:     { icon: MessageSquare, color: 'text-violet-400',  bg: 'bg-violet-500/10',  label: 'Note' },
+  call:     { icon: PhoneCall,     color: 'text-green-400',   bg: 'bg-green-500/10',   label: 'Call' },
+  email:    { icon: Send,          color: 'text-blue-400',    bg: 'bg-blue-500/10',    label: 'Email' },
+  meeting:  { icon: Calendar,      color: 'text-orange-400',  bg: 'bg-orange-500/10',  label: 'Meeting' },
+  sms:      { icon: Phone,         color: 'text-cyan-400',    bg: 'bg-cyan-500/10',    label: 'SMS' },
   whatsapp: { icon: MessageCircle, color: 'text-emerald-400', bg: 'bg-emerald-500/10', label: 'WhatsApp' },
 }
 
 const FILTER_OPTIONS = [
-  { id: 'all', label: 'All' },
-  { id: 'note', label: 'Notes', color: 'text-violet-400' },
-  { id: 'call', label: 'Calls', color: 'text-green-400' },
-  { id: 'email', label: 'Emails', color: 'text-blue-400' },
-  { id: 'meeting', label: 'Meetings', color: 'text-orange-400' },
-  { id: 'sms', label: 'SMS', color: 'text-cyan-400' },
+  { id: 'all',      label: 'All' },
+  { id: 'note',     label: 'Notes',    color: 'text-violet-400' },
+  { id: 'call',     label: 'Calls',    color: 'text-green-400' },
+  { id: 'email',    label: 'Emails',   color: 'text-blue-400' },
+  { id: 'meeting',  label: 'Meetings', color: 'text-orange-400' },
+  { id: 'sms',      label: 'SMS',      color: 'text-cyan-400' },
   { id: 'whatsapp', label: 'WhatsApp', color: 'text-emerald-400' },
 ]
 
@@ -44,33 +44,40 @@ export default function DashboardHome() {
   useEffect(() => {
     const fetchAll = async () => {
       try {
-        const [contactsRes, dealsRes, activitiesRes] = await Promise.all([
-          api.get('/contacts/'),
+        // Fetch true counts via dedicated count endpoints (no caps/pagination issues)
+        // Fetch recent activities feed + deals separately for won value calculation
+        const [
+          contactsCountRes,
+          dealsRes,
+          activitiesCountRes,
+          activitiesRes,
+        ] = await Promise.all([
+          api.get('/contacts/count'),
           api.get('/deals/'),
-          api.get('/activities/recent?limit=50')
+          api.get('/activities/count'),
+          api.get('/activities/recent?limit=50'),
         ])
 
-        const contacts = contactsRes.data
         const deals = dealsRes.data
-        const allActivities = activitiesRes.data
-
         const wonValue = deals
           .filter(d => d.stage === 'won')
           .reduce((sum, d) => sum + d.value, 0)
 
         setStats({
-          contacts: contacts.length,
-          deals: deals.length,
-          won: wonValue,
-          activities: allActivities.length
+          contacts:   contactsCountRes.data.total,
+          deals:      deals.length,
+          won:        wonValue,
+          activities: activitiesCountRes.data.total,
         })
-        setRecentActivities(allActivities)
+
+        setRecentActivities(activitiesRes.data)
       } catch (err) {
         console.error(err)
       } finally {
         setLoadingActivities(false)
       }
     }
+
     fetchAll()
     const interval = setInterval(fetchAll, 15000)
     return () => clearInterval(interval)
@@ -81,10 +88,10 @@ export default function DashboardHome() {
     : recentActivities.filter(a => a.type === activeFilter)
 
   const statCards = [
-    { label: 'Total Contacts', value: stats.contacts, icon: Users, color: 'bg-violet-500' },
-    { label: 'Active Deals', value: stats.deals, icon: TrendingUp, color: 'bg-blue-500' },
-    { label: 'Revenue Won', value: `$${stats.won.toLocaleString()}`, icon: DollarSign, color: 'bg-green-500' },
-    { label: 'Activities', value: stats.activities, icon: Activity, color: 'bg-orange-500' },
+    { label: 'Total Contacts', value: stats.contacts,                  icon: Users,      color: 'bg-violet-500' },
+    { label: 'Active Deals',   value: stats.deals,                     icon: TrendingUp, color: 'bg-blue-500' },
+    { label: 'Revenue Won',    value: `$${stats.won.toLocaleString()}`, icon: DollarSign, color: 'bg-green-500' },
+    { label: 'Activities',     value: stats.activities,                 icon: Activity,   color: 'bg-orange-500' },
   ]
 
   return (
@@ -205,7 +212,6 @@ export default function DashboardHome() {
                   const config = ACTIVITY_TYPE_CONFIG[activity.type] || ACTIVITY_TYPE_CONFIG.note
                   const Icon = config.icon
                   const contactName = `${activity.contact?.first_name || ''} ${activity.contact?.last_name || ''}`.trim()
-                  // Strip [Inbound] prefix for display
                   const displayContent = activity.content?.replace(/^\[Inbound\]\s*/i, '') || ''
 
                   return (

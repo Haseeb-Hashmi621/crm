@@ -1,13 +1,26 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
+from app.models.deal import Deal
 from app.schemas.deal import DealCreate, DealUpdate, DealResponse
 from app.services.deal_service import get_deals, get_deal, create_deal, update_deal, delete_deal
 from typing import List
 
 router = APIRouter()
+
+@router.get("/count")
+def get_deals_count(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Returns the exact total count of all deals — no cap, no pagination."""
+    total = db.query(func.count(Deal.id)).filter(
+        Deal.user_id == current_user.id
+    ).scalar()
+    return {"total": total}
 
 @router.get("/", response_model=List[DealResponse])
 def list_deals(

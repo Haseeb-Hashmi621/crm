@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
+from sqlalchemy import and_, func
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
@@ -16,28 +16,39 @@ from typing import List
 
 router = APIRouter()
 
+@router.get("/count")
+def get_contacts_count(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Returns the exact total count of all contacts — no cap, no pagination."""
+    total = db.query(func.count(Contact.id)).filter(
+        Contact.user_id == current_user.id
+    ).scalar()
+    return {"total": total}
+
 @router.get("/export")
 def export_contacts(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     contacts = get_contacts(db, 0, 10000, str(current_user.id))
-    
+
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(['first_name', 'last_name', 'email', 'phone', 'company'])
-    
+
     for c in contacts:
         writer.writerow([
             c.first_name or '',
             c.last_name or '',
             c.email or '',
-            f'="{c.phone}"' if c.phone else '',
+            f'=\"{c.phone}\"' if c.phone else '',
             c.company or '',
         ])
-    
+
     output.seek(0)
-    
+
     return StreamingResponse(
         io.BytesIO(output.getvalue().encode()),
         media_type="text/csv",
@@ -86,7 +97,6 @@ async def import_contacts(
     decoded = contents.decode('utf-8-sig')
     reader = csv.DictReader(io.StringIO(decoded))
 
-    # Validate headers
     if reader.fieldnames is None or 'first_name' not in reader.fieldnames:
         raise HTTPException(
             status_code=400,
@@ -97,8 +107,6 @@ async def import_contacts(
     skipped = 0
     errors = []
 
-    # Track identifiers already seen within this CSV to catch intra-file duplicates.
-    # SQLAlchemy won't see uncommitted rows in DB queries, so we need this in-memory set.
     seen_contacts = set()
 
     for i, row in enumerate(reader, start=2):
@@ -113,10 +121,6 @@ async def import_contacts(
         company = row.get('company', '').strip() or None
 
         try:
-            # --- Step 1: Deduplicate within the CSV itself ---
-            # Build a precise key based on available fields.
-            # A flat (email, phone) tuple fails when both are empty — all name-only
-            # rows would share the same key ("", "") and collide incorrectly.
             if email and phone:
                 csv_key = ("email+phone", email.lower(), phone)
             elif email:
@@ -131,14 +135,9 @@ async def import_contacts(
                 continue
             seen_contacts.add(csv_key)
 
-            # --- Step 2: Check against existing DB records ---
-            # Logic: AND when both fields exist (avoids false positives),
-            # fallback to whichever single field is available,
-            # last resort: match by full name.
             duplicate = None
 
             if email and phone:
-                # Both present — require both to match (strictest, avoids false positives)
                 duplicate = db.query(Contact).filter(
                     Contact.user_id == current_user.id,
                     Contact.email == email,
@@ -155,7 +154,6 @@ async def import_contacts(
                     Contact.phone == phone
                 ).first()
             else:
-                # No email or phone — match on full name
                 duplicate = db.query(Contact).filter(
                     and_(
                         Contact.user_id == current_user.id,
