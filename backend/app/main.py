@@ -16,6 +16,7 @@ from app.api.v1.inbox import router as inbox_router
 from app.api.v1.conversations import router as conversations_router
 from app.api.v1.webhooks import router as webhooks_router
 from app.api.v1.ai import router as ai_router
+from app.api.v1.tasks import router as tasks_router
 
 app = FastAPI(
     title="CRM API",
@@ -47,6 +48,7 @@ app.include_router(inbox_router, prefix="/inbox", tags=["Inbox"])
 app.include_router(conversations_router, prefix="/conversations", tags=["Conversations"])
 app.include_router(webhooks_router, prefix="/webhooks", tags=["Webhooks"])
 app.include_router(ai_router, prefix="/ai", tags=["AI"])
+app.include_router(tasks_router, prefix="/tasks", tags=["Tasks"])
 
 @app.get("/")
 def root():

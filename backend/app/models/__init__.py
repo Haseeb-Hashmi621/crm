@@ -10,3 +10,4 @@ from .whatsapp_campaign import WhatsappCampaign, WhatsappCampaignRecipient
 from .notification import Notification
 from .segment import Segment
 from .email_template import EmailTemplate
+from .task import Task
