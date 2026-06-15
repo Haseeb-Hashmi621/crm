@@ -1,10 +1,25 @@
 from sqlalchemy.orm import Session
 from app.models.deal import Deal
 from app.models.contact import Contact
+from app.models.task import Task
 from app.schemas.deal import DealCreate, DealUpdate
 from app.services.notification_service import create_notification
 from typing import List, Optional
+from datetime import datetime, timezone, timedelta
 import uuid
+
+STAGES_LABELS = {
+    "new": "New Lead", "contacted": "Contacted",
+    "proposal": "Proposal", "negotiation": "Negotiation",
+    "won": "Won", "lost": "Lost"
+}
+
+STAGE_AUTO_TASKS = {
+    "contacted":   ("Follow up after initial contact", "call",    "medium", 1),
+    "proposal":    ("Send proposal document",          "email",   "high",   2),
+    "negotiation": ("Schedule negotiation call",       "call",    "high",   1),
+    "won":         ("Send welcome package",            "email",   "medium", 3),
+}
 
 
 def get_deals(db: Session, user_id: uuid.UUID) -> List[Deal]:
@@ -18,7 +33,6 @@ def get_deal(db: Session, deal_id: str, user_id: uuid.UUID) -> Optional[Deal]:
 def create_deal(db: Session, deal_data: DealCreate, user_id: uuid.UUID) -> Deal:
     contact_name = deal_data.contact_name
 
-    # If contact_id provided, pull name from contact record
     if deal_data.contact_id:
         contact = db.query(Contact).filter(Contact.id == deal_data.contact_id).first()
         if contact:
@@ -56,13 +70,11 @@ def update_deal(db: Session, deal_id: str, deal_data: DealUpdate, user_id: uuid.
 
     old_stage = deal.stage
 
-    # If contact_id is being updated, sync contact_name automatically
     if deal_data.contact_id is not None:
         contact = db.query(Contact).filter(Contact.id == deal_data.contact_id).first()
         if contact:
             deal.contact_name = f"{contact.first_name or ''} {contact.last_name or ''}".strip()
         deal.contact_id = deal_data.contact_id
-        # Apply remaining fields except contact_id and contact_name
         for key, value in deal_data.model_dump(exclude_unset=True, exclude={'contact_id', 'contact_name'}).items():
             setattr(deal, key, value)
     else:
@@ -73,18 +85,30 @@ def update_deal(db: Session, deal_id: str, deal_data: DealUpdate, user_id: uuid.
     db.refresh(deal)
 
     if deal_data.stage and deal_data.stage != old_stage:
-        stage_labels = {
-            "new": "New Lead", "contacted": "Contacted",
-            "proposal": "Proposal", "negotiation": "Negotiation",
-            "won": "Won", "lost": "Lost"
-        }
+        # Notification
         create_notification(
             db, user_id,
             type="deal_updated",
             title="Deal stage changed",
-            message=f'"{deal.title}" moved to {stage_labels.get(deal.stage, deal.stage)}',
+            message=f'"{deal.title}" moved to {STAGES_LABELS.get(deal.stage, deal.stage)}',
             link=f"/dashboard/deals/{deal.id}"
         )
+        # Dispatch instant refresh (backend side — frontend dispatches window event)
+        # Auto-create task for key stage transitions
+        if deal_data.stage in STAGE_AUTO_TASKS:
+            task_title, task_type, priority, days_ahead = STAGE_AUTO_TASKS[deal_data.stage]
+            auto_task = Task(
+                user_id=user_id,
+                contact_id=deal.contact_id,
+                title=f"{task_title} — {deal.title}",
+                task_type=task_type,
+                priority=priority,
+                status="pending",
+                due_at=datetime.now(timezone.utc) + timedelta(days=days_ahead),
+                notes=f"Auto-created when deal moved to {STAGES_LABELS.get(deal_data.stage, deal_data.stage)}"
+            )
+            db.add(auto_task)
+            db.commit()
 
     return deal
 
