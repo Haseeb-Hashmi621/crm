@@ -4,7 +4,7 @@ import {
   Inbox, MessageSquare, PhoneCall, Send, Users,
   Search, Filter, X, Loader2, ChevronRight,
   Building2, Mail, RefreshCw, SlidersHorizontal,
-  Calendar, TrendingUp
+  Calendar, TrendingUp, Phone, MessageCircle
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import api from '../services/api'
@@ -52,6 +52,23 @@ const TYPE_CONFIG = {
     border: 'border-orange-500/30',
     activeColor: 'bg-orange-600 text-white border-orange-500',
   },
+  // ── FIX: SMS and WhatsApp were missing — they fell back to 'note' config ──
+  sms: {
+    label: 'SMS',
+    icon: Phone,
+    color: 'text-cyan-400',
+    bg: 'bg-cyan-500/10',
+    border: 'border-cyan-500/30',
+    activeColor: 'bg-cyan-600 text-white border-cyan-500',
+  },
+  whatsapp: {
+    label: 'WhatsApp',
+    icon: MessageCircle,
+    color: 'text-emerald-400',
+    bg: 'bg-emerald-500/10',
+    border: 'border-emerald-500/30',
+    activeColor: 'bg-emerald-600 text-white border-emerald-500',
+  },
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -95,6 +112,7 @@ function isSameDay(a, b) {
 
 function ActivityItem({ item, index }) {
   const navigate = useNavigate()
+  // Falls back to 'note' only if type is truly unrecognised
   const config = TYPE_CONFIG[item.type] || TYPE_CONFIG.note
   const Icon = config.icon
 
@@ -105,6 +123,10 @@ function ActivityItem({ item, index }) {
   const initials = item.contact
     ? `${item.contact.first_name?.[0] || ''}${item.contact.last_name?.[0] || ''}`.toUpperCase()
     : '?'
+
+  // Strip [Inbound] prefix for display
+  const displayContent = item.content?.replace(/^\[Inbound\]\s*/i, '') ?? ''
+  const isInbound = item.content?.startsWith('[Inbound]')
 
   return (
     <motion.div
@@ -120,8 +142,10 @@ function ActivityItem({ item, index }) {
           {initials}
         </div>
         {/* Activity type badge */}
-        <div className={`absolute -bottom-1 -right-1 w-4.5 h-4.5 rounded-full ${config.bg} border ${config.border} flex items-center justify-center`}
-          style={{ width: '18px', height: '18px' }}>
+        <div
+          className={`absolute -bottom-1 -right-1 rounded-full ${config.bg} border ${config.border} flex items-center justify-center`}
+          style={{ width: '18px', height: '18px' }}
+        >
           <Icon className={`w-2.5 h-2.5 ${config.color}`} />
         </div>
       </div>
@@ -133,7 +157,9 @@ function ActivityItem({ item, index }) {
           <span className="text-white text-sm font-medium">{contactName}</span>
           <span className="text-gray-600 text-xs">·</span>
           <span className={`text-xs font-semibold uppercase tracking-wide ${config.color}`}>
-            {config.label.slice(0, -1)}
+            {/* Remove trailing 's' from label for singular display (Notes→Note, etc.) */}
+            {config.label.replace(/s$/, '')}
+            {isInbound && <span className="ml-1 text-[10px] normal-case font-normal text-gray-500">↙ inbound</span>}
           </span>
           {item.contact?.company && (
             <>
@@ -159,7 +185,7 @@ function ActivityItem({ item, index }) {
 
         {/* Activity content */}
         <p className="text-gray-400 text-sm leading-relaxed line-clamp-2">
-          {item.content}
+          {displayContent}
         </p>
       </div>
 
@@ -269,7 +295,7 @@ function ContactFilterDropdown({ contacts, selectedId, onSelect, onClose }) {
 
 export default function InboxPage() {
   const [items, setItems] = useState([])
-  const [stats, setStats] = useState({ all: 0, note: 0, call: 0, email: 0, meeting: 0 })
+  const [stats, setStats] = useState({ all: 0, note: 0, call: 0, email: 0, meeting: 0, sms: 0, whatsapp: 0 })
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [page, setPage] = useState(1)
@@ -371,7 +397,8 @@ export default function InboxPage() {
     (a, b) => new Date(b) - new Date(a)
   )
 
-  const typeOrder = ['all', 'note', 'call', 'email', 'meeting']
+  // Show SMS + WhatsApp tabs in the filter bar too
+  const typeOrder = ['all', 'note', 'call', 'email', 'meeting', 'sms', 'whatsapp']
 
   return (
     <div className="flex h-screen overflow-hidden">

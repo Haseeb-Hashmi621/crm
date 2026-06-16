@@ -157,6 +157,7 @@ export default function DealDetail() {
       setDeal(res.data)
       setEditForm(prev => ({ ...prev, stage: newStage }))
       toast.success(`Stage updated to ${STAGES[newStage].label}`)
+      window.dispatchEvent(new Event('notification:refresh'))
     } catch (err) {
       toast.error('Failed to update stage')
     }

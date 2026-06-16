@@ -40,8 +40,14 @@ export default function NotificationBell() {
 
   useEffect(() => {
     fetchCount()
-    const interval = setInterval(fetchCount, 30_000)
+    const interval = setInterval(fetchCount, 8_000)
     return () => clearInterval(interval)
+  }, [fetchCount])
+
+  useEffect(() => {
+    const handler = () => fetchCount()
+    window.addEventListener('notification:refresh', handler)
+    return () => window.removeEventListener('notification:refresh', handler)
   }, [fetchCount])
 
   // ── Fetch full list when panel opens ────────────────────────────────────

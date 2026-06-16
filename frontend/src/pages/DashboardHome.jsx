@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Users, TrendingUp, DollarSign, Activity, MessageSquare, PhoneCall, Send, Calendar, Phone, MessageCircle } from 'lucide-react'
+import { Users, TrendingUp, DollarSign, Activity, MessageSquare, PhoneCall, Send, Calendar, Phone, MessageCircle, CheckSquare, AlertCircle, Clock } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import api from '../services/api'
 
@@ -32,6 +32,94 @@ function TimeAgo({ dateString }) {
   if (diff < 86400) return <span>{Math.floor(diff / 3600)}h ago</span>
   if (diff < 604800) return <span>{Math.floor(diff / 86400)}d ago</span>
   return <span>{date.toLocaleDateString()}</span>
+}
+
+function TaskSummaryWidget() {
+  const [taskStats, setTaskStats] = useState(null)
+  const [overdueList, setOverdueList] = useState([])
+  const [todayList, setTodayList] = useState([])
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    const fetch = async () => {
+      try {
+        const [statsRes, overdueRes, todayRes] = await Promise.all([
+          api.get('/tasks/stats'),
+          api.get('/tasks/overdue'),
+          api.get('/tasks/today'),
+        ])
+        setTaskStats(statsRes.data)
+        setOverdueList(overdueRes.data.slice(0, 3))
+        setTodayList(todayRes.data.slice(0, 3))
+      } catch (err) {
+        console.error(err)
+      }
+    }
+    fetch()
+  }, [])
+
+  if (!taskStats) return null
+
+  const hasItems = overdueList.length > 0 || todayList.length > 0
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.3 }}
+      className="bg-gray-900 rounded-2xl p-6 border border-gray-800 mt-6"
+    >
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <CheckSquare className="w-5 h-5 text-violet-400" />
+          <h2 className="text-white font-semibold">Tasks</h2>
+        </div>
+        <button
+          onClick={() => navigate('/dashboard/tasks')}
+          className="text-violet-400 hover:text-violet-300 text-xs font-medium transition-colors"
+        >
+          View all →
+        </button>
+      </div>
+
+      {/* Mini stats */}
+      <div className="grid grid-cols-3 gap-3 mb-5">
+        {[
+          { label: 'Pending',   value: taskStats.total_pending, color: 'text-violet-400', bg: 'bg-violet-500/10' },
+          { label: 'Due Today', value: taskStats.due_today,     color: 'text-yellow-400', bg: 'bg-yellow-500/10' },
+          { label: 'Overdue',   value: taskStats.overdue,       color: 'text-red-400',    bg: 'bg-red-500/10'    },
+        ].map(s => (
+          <div key={s.label} className={`${s.bg} rounded-xl p-3 text-center`}>
+            <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
+            <p className="text-gray-500 text-xs mt-0.5">{s.label}</p>
+          </div>
+        ))}
+      </div>
+
+      {!hasItems ? (
+        <p className="text-gray-600 text-sm text-center py-4">No urgent tasks — you're all caught up!</p>
+      ) : (
+        <div className="space-y-2">
+          {overdueList.map(task => (
+            <div key={task.id} onClick={() => navigate('/dashboard/tasks')}
+              className="flex items-center gap-3 p-3 bg-red-500/5 border border-red-500/20 rounded-xl cursor-pointer hover:bg-red-500/10 transition-colors">
+              <AlertCircle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
+              <p className="text-white text-xs font-medium flex-1 truncate">{task.title}</p>
+              <span className="text-red-400 text-[10px] font-medium flex-shrink-0">Overdue</span>
+            </div>
+          ))}
+          {todayList.map(task => (
+            <div key={task.id} onClick={() => navigate('/dashboard/tasks')}
+              className="flex items-center gap-3 p-3 bg-yellow-500/5 border border-yellow-500/20 rounded-xl cursor-pointer hover:bg-yellow-500/10 transition-colors">
+              <Clock className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" />
+              <p className="text-white text-xs font-medium flex-1 truncate">{task.title}</p>
+              <span className="text-yellow-400 text-[10px] font-medium flex-shrink-0">Today</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </motion.div>
+  )
 }
 
 export default function DashboardHome() {
@@ -253,6 +341,10 @@ export default function DashboardHome() {
             </AnimatePresence>
           )}
         </div>
+
+        {/* Task Summary Widget */}
+        <TaskSummaryWidget />
+
       </motion.div>
     </div>
   )

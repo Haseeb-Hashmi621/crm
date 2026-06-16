@@ -17,6 +17,7 @@ import Templates from './pages/Templates'
 import InboxPage from './pages/InboxPage'
 import Conversations from './pages/Conversations'
 import useInboundNotifications from './hooks/useInboundNotifications'
+import Tasks from './pages/Tasks'
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated } = useAuthStore()
@@ -54,6 +55,7 @@ function App() {
           <Route path="templates" element={<Templates />} />
           <Route path="inbox" element={<InboxPage />} />
           <Route path="conversations" element={<Conversations />} />
+          <Route path="tasks" element={<Tasks />} />
         </Route>
         <Route path="/" element={<Navigate to="/login" />} />
       </Routes>

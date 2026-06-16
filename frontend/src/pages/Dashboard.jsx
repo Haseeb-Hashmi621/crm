@@ -1,21 +1,26 @@
 import { motion } from 'framer-motion'
-import { Users, TrendingUp, DollarSign, Activity, LogOut, Settings, Mail, Filter, FileText, Inbox, MessageCircle } from 'lucide-react'
+import {
+  Users, TrendingUp, DollarSign, Activity, LogOut,
+  Settings, Mail, Filter, FileText, Inbox,
+  MessageCircle, CheckSquare
+} from 'lucide-react'
 import useAuthStore from '../store/authStore'
 import { useNavigate, useLocation, Outlet } from 'react-router-dom'
 import GlobalSearch from '../components/GlobalSearch'
 import NotificationBell from '../components/NotificationBell'
 
 const navItems = [
-  { label: 'Dashboard',  icon: Activity,  path: '/dashboard' },
-  { label: 'Conversations', icon: MessageCircle, path: '/dashboard/conversations' },
-  { label: 'Contacts',   icon: Users,     path: '/dashboard/contacts' },
-  { label: 'Deals',      icon: TrendingUp, path: '/dashboard/deals' },
-  { label: 'Revenue',    icon: DollarSign, path: '/dashboard/revenue' },
-  { label: 'Campaigns',  icon: Mail,      path: '/dashboard/campaigns' },
-  { label: 'Segments',   icon: Filter,    path: '/dashboard/segments' },
-  { label: 'Templates', icon: FileText, path: '/dashboard/templates' },
-  { label: 'Settings',   icon: Settings,  path: '/dashboard/settings' },
-  { label: 'Inbox', icon: Inbox, path: '/dashboard/inbox' },
+  { label: 'Dashboard',      icon: Activity,      path: '/dashboard' },
+  { label: 'Conversations',  icon: MessageCircle, path: '/dashboard/conversations' },
+  { label: 'Contacts',       icon: Users,         path: '/dashboard/contacts' },
+  { label: 'Deals',          icon: TrendingUp,    path: '/dashboard/deals' },
+  { label: 'Tasks',          icon: CheckSquare,   path: '/dashboard/tasks' },
+  { label: 'Revenue',        icon: DollarSign,    path: '/dashboard/revenue' },
+  { label: 'Campaigns',      icon: Mail,          path: '/dashboard/campaigns' },
+  { label: 'Segments',       icon: Filter,        path: '/dashboard/segments' },
+  { label: 'Templates',      icon: FileText,      path: '/dashboard/templates' },
+  { label: 'Inbox',          icon: Inbox,         path: '/dashboard/inbox' },
+  { label: 'Settings',       icon: Settings,      path: '/dashboard/settings' },
 ]
 
 export default function Dashboard() {

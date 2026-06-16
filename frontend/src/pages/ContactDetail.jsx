@@ -4,7 +4,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, Mail, Phone, Building2, Calendar,
   MessageSquare, PhoneCall, Send, Users,
-  Plus, Trash2, Loader2, Edit2, X, Check, MessageCircle
+  Plus, Trash2, Loader2, Edit2, X, Check, MessageCircle,
+  CheckSquare, Clock, AlertCircle
 } from 'lucide-react'
 import api from '../services/api'
 import toast from 'react-hot-toast'
@@ -43,6 +44,119 @@ function ActivityIcon({ type }) {
   )
 }
 
+function ContactTasksTab({ contactId }) {
+  const [tasks, setTasks] = useState([])
+  const [contacts, setContacts] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [showModal, setShowModal] = useState(false)
+
+  useEffect(() => {
+    const fetchTasks = async () => {
+      try {
+        const [tasksRes, contactsRes] = await Promise.all([
+          api.get(`/tasks/?contact_id=${contactId}`),
+          api.get('/contacts/'),
+        ])
+        setTasks(tasksRes.data)
+        setContacts(contactsRes.data)
+      } catch (err) { console.error(err) }
+      finally { setLoading(false) }
+    }
+    fetchTasks()
+  }, [contactId])
+
+  const handleCreate = async (data) => {
+    const res = await api.post('/tasks/', { ...data, contact_id: contactId })
+    setTasks(prev => [res.data, ...prev])
+    toast.success('Task created!')
+    setShowModal(false)
+  }
+
+  const handleComplete = async (taskId) => {
+    const res = await api.post(`/tasks/${taskId}/complete`)
+    setTasks(prev => prev.map(t => t.id === taskId ? res.data : t))
+    toast.success('Task completed!')
+  }
+
+  const handleDelete = async (taskId) => {
+    if (!confirm('Delete this task?')) return
+    await api.delete(`/tasks/${taskId}`)
+    setTasks(prev => prev.filter(t => t.id !== taskId))
+    toast.success('Task deleted')
+  }
+
+  if (loading) return <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 text-violet-500 animate-spin" /></div>
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-gray-400 text-sm">{tasks.length} task{tasks.length !== 1 ? 's' : ''}</p>
+        <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+          onClick={() => setShowModal(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 hover:bg-violet-500 text-white rounded-lg text-xs font-medium transition-colors">
+          <Plus className="w-3.5 h-3.5" /> Add Task
+        </motion.button>
+      </div>
+
+      {tasks.length === 0 ? (
+        <div className="text-center py-10">
+          <CheckSquare className="w-8 h-8 mx-auto mb-2 text-gray-700" />
+          <p className="text-gray-500 text-sm">No tasks for this contact</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {tasks.map(task => {
+            const typeConfig = {
+              call: { color: 'text-green-400', bg: 'bg-green-500/10' },
+              email: { color: 'text-blue-400', bg: 'bg-blue-500/10' },
+              meeting: { color: 'text-orange-400', bg: 'bg-orange-500/10' },
+              follow_up: { color: 'text-violet-400', bg: 'bg-violet-500/10' },
+            }[task.task_type] || { color: 'text-violet-400', bg: 'bg-violet-500/10' }
+            const overdue = task.status === 'pending' && task.due_at && new Date(task.due_at) < new Date()
+            return (
+              <div key={task.id} className={`flex items-center gap-3 p-3 rounded-xl border transition-colors ${
+                task.status === 'completed' ? 'bg-gray-800/30 border-gray-800 opacity-60' :
+                overdue ? 'bg-red-500/5 border-red-500/20' : 'bg-gray-800/50 border-gray-800'
+              }`}>
+                <button onClick={() => task.status !== 'completed' && handleComplete(task.id)}
+                  className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${
+                    task.status === 'completed' ? 'bg-green-500 border-green-500' : 'border-gray-600 hover:border-violet-500'
+                  }`}>
+                  {task.status === 'completed' && <Check className="w-3 h-3 text-white" />}
+                </button>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm ${task.status === 'completed' ? 'line-through text-gray-500' : 'text-white'}`}>{task.title}</p>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className={`text-[10px] font-medium capitalize ${typeConfig.color}`}>{task.task_type.replace('_', ' ')}</span>
+                    {task.due_at && (
+                      <span className={`text-[10px] flex items-center gap-0.5 ${overdue ? 'text-red-400' : 'text-gray-500'}`}>
+                        {overdue ? <AlertCircle className="w-2.5 h-2.5" /> : <Clock className="w-2.5 h-2.5" />}
+                        {new Date(task.due_at).toLocaleDateString()}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <button onClick={() => handleDelete(task.id)}
+                  className="text-gray-600 hover:text-red-400 transition-colors flex-shrink-0">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      <AnimatePresence>
+        {showModal && (
+          <TaskModal task={null} contacts={contacts}
+            onSave={handleCreate}
+            onClose={() => setShowModal(false)} />
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
 export default function ContactDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -51,6 +165,7 @@ export default function ContactDetail() {
   const [activities, setActivities] = useState([])
   const [loadingContact, setLoadingContact] = useState(true)
   const [loadingActivities, setLoadingActivities] = useState(true)
+  const [activeTab, setActiveTab] = useState('activity')
 
   // Activity compose state
   const [activeType, setActiveType] = useState('note')
@@ -288,7 +403,7 @@ export default function ContactDetail() {
           </div>
         </motion.div>
 
-        {/* RIGHT — Activity Feed */}
+        {/* RIGHT — Activity Feed + Tasks */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -349,76 +464,92 @@ export default function ContactDetail() {
             </div>
           </div>
 
-          {/* Activity list */}
+          {/* Activity list / Tasks — tabbed */}
           <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
-            <div className="flex items-center justify-between mb-4">
-              <p className="text-white text-sm font-medium">Activity History</p>
-              <span className="text-gray-500 text-xs">{activities.length} total</span>
+            {/* Tab switcher */}
+            <div className="flex items-center gap-1 bg-gray-800 rounded-xl p-1 mb-5">
+              {[['activity', 'Activity'], ['tasks', 'Tasks']].map(([tabId, label]) => (
+                <button key={tabId} onClick={() => setActiveTab(tabId)}
+                  className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
+                    activeTab === tabId ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'
+                  }`}>{label}</button>
+              ))}
             </div>
 
-            {loadingActivities ? (
-              <div className="flex items-center justify-center py-10">
-                <Loader2 className="w-6 h-6 text-violet-500 animate-spin" />
-              </div>
-            ) : activities.length === 0 ? (
-              <div className="text-center py-12">
-                <MessageSquare className="w-10 h-10 mx-auto mb-3 text-gray-700" />
-                <p className="text-gray-500 text-sm">No activities yet</p>
-                <p className="text-gray-600 text-xs mt-1">Log a note, call, or email above</p>
-              </div>
-            ) : (
-              <div className="space-y-1">
-                <AnimatePresence>
-                  {activities.map((activity, i) => {
-                    const typeInfo = ACTIVITY_TYPES.find(t => t.id === activity.type) || ACTIVITY_TYPES[0]
-                    const isInbound = activity.content?.startsWith('[Inbound]')
-                    const displayContent = activity.content?.replace(/^\[Inbound\]\s*/i, '') || ''
+            {activeTab === 'activity' ? (
+              <>
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-white text-sm font-medium">Activity History</p>
+                  <span className="text-gray-500 text-xs">{activities.length} total</span>
+                </div>
 
-                    return (
-                      <motion.div
-                        key={activity.id}
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: 10, height: 0 }}
-                        transition={{ delay: i * 0.03 }}
-                        className="group flex gap-3 py-3 border-b border-gray-800 last:border-0"
-                      >
-                        {/* Timeline dot */}
-                        <div className="flex flex-col items-center">
-                          <ActivityIcon type={activity.type} />
-                          {i < activities.length - 1 && (
-                            <div className="w-px flex-1 bg-gray-800 mt-2" />
-                          )}
-                        </div>
+                {loadingActivities ? (
+                  <div className="flex items-center justify-center py-10">
+                    <Loader2 className="w-6 h-6 text-violet-500 animate-spin" />
+                  </div>
+                ) : activities.length === 0 ? (
+                  <div className="text-center py-12">
+                    <MessageSquare className="w-10 h-10 mx-auto mb-3 text-gray-700" />
+                    <p className="text-gray-500 text-sm">No activities yet</p>
+                    <p className="text-gray-600 text-xs mt-1">Log a note, call, or email above</p>
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    <AnimatePresence>
+                      {activities.map((activity, i) => {
+                        const typeInfo = ACTIVITY_TYPES.find(t => t.id === activity.type) || ACTIVITY_TYPES[0]
+                        const isInbound = activity.content?.startsWith('[Inbound]')
+                        const displayContent = activity.content?.replace(/^\[Inbound\]\s*/i, '') || ''
 
-                        {/* Content */}
-                        <div className="flex-1 min-w-0 pb-2">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className={`text-xs font-semibold uppercase tracking-wide ${typeInfo.color}`}>
-                                {isInbound ? `↙ ${typeInfo.label}` : typeInfo.label}
-                              </span>
-                              <span className="text-gray-600 text-xs">
-                                <TimeAgo dateString={activity.created_at} />
-                              </span>
+                        return (
+                          <motion.div
+                            key={activity.id}
+                            initial={{ opacity: 0, x: -10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: 10, height: 0 }}
+                            transition={{ delay: i * 0.03 }}
+                            className="group flex gap-3 py-3 border-b border-gray-800 last:border-0"
+                          >
+                            {/* Timeline dot */}
+                            <div className="flex flex-col items-center">
+                              <ActivityIcon type={activity.type} />
+                              {i < activities.length - 1 && (
+                                <div className="w-px flex-1 bg-gray-800 mt-2" />
+                              )}
                             </div>
-                            <motion.button
-                              whileHover={{ scale: 1.1 }}
-                              onClick={() => handleDeleteActivity(activity.id)}
-                              className="opacity-0 group-hover:opacity-100 text-gray-600 hover:text-red-400 transition-all flex-shrink-0 mt-0.5"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </motion.button>
-                          </div>
-                          <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-wrap">
-                            {displayContent}
-                          </p>
-                        </div>
-                      </motion.div>
-                    )
-                  })}
-                </AnimatePresence>
-              </div>
+
+                            {/* Content */}
+                            <div className="flex-1 min-w-0 pb-2">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className={`text-xs font-semibold uppercase tracking-wide ${typeInfo.color}`}>
+                                    {isInbound ? `↙ ${typeInfo.label}` : typeInfo.label}
+                                  </span>
+                                  <span className="text-gray-600 text-xs">
+                                    <TimeAgo dateString={activity.created_at} />
+                                  </span>
+                                </div>
+                                <motion.button
+                                  whileHover={{ scale: 1.1 }}
+                                  onClick={() => handleDeleteActivity(activity.id)}
+                                  className="opacity-0 group-hover:opacity-100 text-gray-600 hover:text-red-400 transition-all flex-shrink-0 mt-0.5"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </motion.button>
+                              </div>
+                              <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-wrap">
+                                {displayContent}
+                              </p>
+                            </div>
+                          </motion.div>
+                        )
+                      })}
+                    </AnimatePresence>
+                  </div>
+                )}
+              </>
+            ) : (
+              <ContactTasksTab contactId={id} />
             )}
           </div>
         </motion.div>
