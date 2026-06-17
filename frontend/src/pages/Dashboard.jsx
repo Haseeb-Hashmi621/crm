@@ -21,6 +21,7 @@ const navItems = [
   { label: 'Templates',      icon: FileText,      path: '/dashboard/templates' },
   { label: 'Inbox',          icon: Inbox,         path: '/dashboard/inbox' },
   { label: 'Settings',       icon: Settings,      path: '/dashboard/settings' },
+  { label: 'Mail',          icon: Mail,         path: '/dashboard/mail' },
 ]
 
 export default function Dashboard() {

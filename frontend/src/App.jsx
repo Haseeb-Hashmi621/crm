@@ -18,6 +18,7 @@ import InboxPage from './pages/InboxPage'
 import Conversations from './pages/Conversations'
 import useInboundNotifications from './hooks/useInboundNotifications'
 import Tasks from './pages/Tasks'
+import Mails from './pages/Mails'
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated } = useAuthStore()
@@ -56,6 +57,7 @@ function App() {
           <Route path="inbox" element={<InboxPage />} />
           <Route path="conversations" element={<Conversations />} />
           <Route path="tasks" element={<Tasks />} />
+          <Route path="mail" element={<Mails/>} />
         </Route>
         <Route path="/" element={<Navigate to="/login" />} />
       </Routes>

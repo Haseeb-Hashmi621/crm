@@ -15,6 +15,7 @@ from app.models import user, workspace, contact, tag, deal
 from app.models.activity import Activity
 from app.models.tag import contact_tags
 from app.models.segment import Segment
+from app.models.mail import Email
 
 config = context.config
 
