@@ -10,10 +10,13 @@ def get_user_by_email(db: Session, email: str):
 
 def create_user(db: Session, user_data: UserSignup):
     hashed_password = get_password_hash(user_data.password)
+    user_count = db.query(User).count()
+    role = 'admin' if user_count == 0 else 'employee'
     db_user = User(
         email=user_data.email,
         hashed_password=hashed_password,
-        full_name=user_data.full_name
+        full_name=user_data.full_name,
+        role=role,
     )
     db.add(db_user)
     db.commit()

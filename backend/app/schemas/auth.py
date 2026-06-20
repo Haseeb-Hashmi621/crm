@@ -26,8 +26,8 @@ class TokenData(BaseModel):
 class UserResponse(BaseModel):
     id: UUID
     email: str
-    full_name: str
-    role: str   # 'admin' | 'employee'
+    full_name: Optional[str] = None   # was str — NULL crashes serialization
+    role: str = 'employee'            # was str — NULL crashes serialization
 
     class Config:
         from_attributes = True
