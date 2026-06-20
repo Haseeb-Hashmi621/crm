@@ -42,6 +42,46 @@ class SummarizeResponse(BaseModel):
     suggested_tags: List[str]
 
 
+# ── Additional schemas for email reply ──────────────────────────────────────
+
+class GenerateEmailReplyRequest(BaseModel):
+    email_body: str
+    email_subject: Optional[str] = ""
+    sender_name: Optional[str] = "the sender"
+    extra_context: Optional[str] = ""
+
+class ChecklistItem(BaseModel):
+    id: int
+    request: str
+    category: str
+
+class GenerateEmailReplyResponse(BaseModel):
+    draft: str
+    checklist: List[ChecklistItem]
+    warnings: List[str]
+    item_count: int
+
+# ── POST /ai/generate-email-reply ─────────────────────────────────────────────
+
+@router.post("/generate-email-reply", response_model=GenerateEmailReplyResponse)
+async def generate_email_reply_endpoint(request: GenerateEmailReplyRequest):
+    """
+    Two-pass AI email reply generation.
+    Pass 1: Extract every request/question from the email as a checklist.
+    Pass 2: Generate a full professional reply addressing ALL checklist items.
+    Pass 3: Verify coverage; auto-repair once if items are missed.
+    Returns draft + checklist + any warnings about items that may still be missing.
+    """
+    from app.services.ai_email_service import generate_email_reply
+    result = generate_email_reply(
+        email_body=request.email_body,
+        email_subject=request.email_subject or "",
+        sender_name=request.sender_name or "the sender",
+        extra_context=request.extra_context or "",
+    )
+    return GenerateEmailReplyResponse(**result)
+
+
 # ── POST /ai/suggest-reply ───────────────────────────────────────────────────
 
 @router.post("/suggest-reply", response_model=SuggestReplyResponse)

@@ -18,6 +18,7 @@ from app.api.v1.webhooks import router as webhooks_router
 from app.api.v1.ai import router as ai_router
 from app.api.v1.tasks import router as tasks_router
 from app.api.v1.mails import router as mail_router
+from app.api.v1.admin import router as admin_router
 
 app = FastAPI(
     title="CRM API",
@@ -51,6 +52,7 @@ app.include_router(webhooks_router, prefix="/webhooks", tags=["Webhooks"])
 app.include_router(ai_router, prefix="/ai", tags=["AI"])
 app.include_router(tasks_router, prefix="/tasks", tags=["Tasks"])
 app.include_router(mail_router, prefix="/mail", tags=["Mails"])
+app.include_router(admin_router, prefix="/admin", tags=["Admin"])
 
 @app.get("/")
 def root():
