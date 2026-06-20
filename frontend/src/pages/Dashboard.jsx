@@ -1,33 +1,46 @@
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import {
   Users, TrendingUp, DollarSign, Activity, LogOut,
   Settings, Mail, Filter, FileText, Inbox,
-  MessageCircle, CheckSquare
+  MessageCircle, CheckSquare, Shield
 } from 'lucide-react'
 import useAuthStore from '../store/authStore'
 import { useNavigate, useLocation, Outlet } from 'react-router-dom'
 import GlobalSearch from '../components/GlobalSearch'
 import NotificationBell from '../components/NotificationBell'
+import api from '../services/api'
 
-const navItems = [
-  { label: 'Dashboard',      icon: Activity,      path: '/dashboard' },
-  { label: 'Conversations',  icon: MessageCircle, path: '/dashboard/conversations' },
-  { label: 'Contacts',       icon: Users,         path: '/dashboard/contacts' },
-  { label: 'Deals',          icon: TrendingUp,    path: '/dashboard/deals' },
-  { label: 'Tasks',          icon: CheckSquare,   path: '/dashboard/tasks' },
-  { label: 'Revenue',        icon: DollarSign,    path: '/dashboard/revenue' },
-  { label: 'Campaigns',      icon: Mail,          path: '/dashboard/campaigns' },
-  { label: 'Segments',       icon: Filter,        path: '/dashboard/segments' },
-  { label: 'Templates',      icon: FileText,      path: '/dashboard/templates' },
-  { label: 'Inbox',          icon: Inbox,         path: '/dashboard/inbox' },
-  { label: 'Settings',       icon: Settings,      path: '/dashboard/settings' },
-  { label: 'Mail',          icon: Mail,         path: '/dashboard/mail' },
+const baseNavItems = [
+  { label: 'Dashboard',     icon: Activity,      path: '/dashboard' },
+  { label: 'Conversations', icon: MessageCircle, path: '/dashboard/conversations' },
+  { label: 'Contacts',      icon: Users,         path: '/dashboard/contacts' },
+  { label: 'Deals',         icon: TrendingUp,    path: '/dashboard/deals' },
+  { label: 'Tasks',         icon: CheckSquare,   path: '/dashboard/tasks' },
+  { label: 'Revenue',       icon: DollarSign,    path: '/dashboard/revenue' },
+  { label: 'Campaigns',     icon: Mail,          path: '/dashboard/campaigns' },
+  { label: 'Segments',      icon: Filter,        path: '/dashboard/segments' },
+  { label: 'Templates',     icon: FileText,      path: '/dashboard/templates' },
+  { label: 'Inbox',         icon: Inbox,         path: '/dashboard/inbox' },
+  { label: 'Mail',          icon: Mail,          path: '/dashboard/mail' },
+  { label: 'Settings',      icon: Settings,      path: '/dashboard/settings' },
 ]
+
+const adminNavItem = { label: 'Admin', icon: Shield, path: '/dashboard/admin' }
 
 export default function Dashboard() {
   const { logout } = useAuthStore()
   const navigate = useNavigate()
   const location = useLocation()
+  const [userRole, setUserRole] = useState(null)
+
+  useEffect(() => {
+    api.get('/auth/me').then(r => setUserRole(r.data.role)).catch(() => {})
+  }, [])
+
+  const navItems = userRole === 'admin'
+    ? [...baseNavItems, adminNavItem]
+    : baseNavItems
 
   const handleLogout = () => {
     logout()
@@ -67,6 +80,8 @@ export default function Dashboard() {
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
                 isActive(item.path)
                   ? 'bg-violet-600 text-white'
+                  : item.label === 'Admin'
+                  ? 'text-violet-400 hover:text-white hover:bg-gray-800'
                   : 'text-gray-400 hover:text-white hover:bg-gray-800'
               }`}
             >

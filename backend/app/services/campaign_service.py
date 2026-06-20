@@ -71,7 +71,6 @@ def send_campaign(
     if campaign.status == "sent":
         return {"error": "Campaign already sent"}
 
-    # Get contacts
     query = db.query(Contact).filter(Contact.user_id == user_id)
     if contact_ids:
         query = query.filter(Contact.id.in_(contact_ids))
@@ -89,16 +88,28 @@ def send_campaign(
 
         contact_name = f"{contact.first_name or ''} {contact.last_name or ''}".strip()
 
-        # Personalize body
         personalized_body = campaign.body.replace("{{name}}", contact_name)
         personalized_body = personalized_body.replace("{{email}}", contact.email)
         personalized_body = personalized_body.replace("{{company}}", contact.company or "")
 
-        # Build HTML
+        # Pre-create recipient to get ID for pixel URL
+        recipient = CampaignRecipient(
+            campaign_id=campaign.id,
+            contact_id=contact.id,
+            email=contact.email,
+            name=contact_name,
+            status="pending",
+        )
+        db.add(recipient)
+        db.flush()  # get recipient.id without full commit
+
+        pixel_url = f"{settings.PUBLIC_BACKEND_URL}/campaigns/track/{campaign.id}/{recipient.id}/open.gif"
+
         html_body = f"""
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             {personalized_body.replace(chr(10), '<br>')}
         </div>
+        <img src="{pixel_url}" width="1" height="1" style="display:none;" alt="" />
         """
 
         try:
@@ -109,30 +120,14 @@ def send_campaign(
                 "html": html_body,
             })
 
-            # Save recipient record
-            recipient = CampaignRecipient(
-                campaign_id=campaign.id,
-                contact_id=contact.id,
-                email=contact.email,
-                name=contact_name,
-                status="sent",
-                sent_at=datetime.now(timezone.utc)
-            )
-            db.add(recipient)
+            recipient.status = "sent"
+            recipient.sent_at = datetime.now(timezone.utc)
             sent_count += 1
 
         except Exception as e:
-            recipient = CampaignRecipient(
-                campaign_id=campaign.id,
-                contact_id=contact.id,
-                email=contact.email,
-                name=contact_name,
-                status="failed"
-            )
-            db.add(recipient)
+            recipient.status = "failed"
             failed_count += 1
 
-    # Update campaign status
     campaign.status = "sent"
     campaign.sent_count = sent_count
     campaign.sent_at = datetime.now(timezone.utc)

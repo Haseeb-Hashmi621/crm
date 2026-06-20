@@ -147,11 +147,15 @@ function EmailCampaigns() {
     setShowTemplatePicker(false)
   }
 
+  const totalSent = campaigns.reduce((s, c) => s + c.sent_count, 0)
+  const totalOpens = campaigns.reduce((s, c) => s + (c.open_count || 0), 0)
+  const openRate = totalSent > 0 ? Math.round((totalOpens / totalSent) * 100) : 0
+
   const statCards = [
     { label: 'Total', value: campaigns.length, icon: Mail, color: 'bg-violet-500' },
     { label: 'Sent', value: campaigns.filter(c => c.status === 'sent').length, icon: CheckCircle2, color: 'bg-green-500' },
-    { label: 'Emails Sent', value: campaigns.reduce((s, c) => s + c.sent_count, 0), icon: Send, color: 'bg-blue-500' },
-    { label: 'Drafts', value: campaigns.filter(c => c.status === 'draft').length, icon: Clock, color: 'bg-orange-500' },
+    { label: 'Emails Sent', value: totalSent, icon: Send, color: 'bg-blue-500' },
+    { label: 'Open Rate', value: `${openRate}%`, icon: Eye, color: 'bg-pink-500' },
   ]
 
   return (
@@ -209,9 +213,20 @@ function EmailCampaigns() {
                       <p className="text-gray-500 text-sm truncate">{campaign.subject}</p>
                       <div className="flex items-center gap-4 mt-1">
                         {campaign.status === 'sent' && (
-                          <span className="text-gray-600 text-xs flex items-center gap-1">
-                            <Send className="w-3 h-3" />{campaign.sent_count} sent
-                          </span>
+                          <>
+                            <span className="text-gray-600 text-xs flex items-center gap-1">
+                              <Send className="w-3 h-3" />{campaign.sent_count} sent
+                            </span>
+                            <span className="text-gray-600 text-xs flex items-center gap-1">
+                              <Eye className="w-3 h-3 text-pink-400" />
+                              {campaign.open_count || 0} opened
+                              {campaign.sent_count > 0 && (
+                                <span className="text-gray-700">
+                                  ({Math.round(((campaign.open_count || 0) / campaign.sent_count) * 100)}%)
+                                </span>
+                              )}
+                            </span>
+                          </>
                         )}
                         <span className="text-gray-600 text-xs">
                           {campaign.sent_at
@@ -379,11 +394,23 @@ function EmailCampaigns() {
                 <h2 className="text-white font-semibold">Campaign Details</h2>
                 <button onClick={() => setShowDetailModal(false)} className="text-gray-500 hover:text-white"><X className="w-5 h-5" /></button>
               </div>
-              <div className="grid grid-cols-2 gap-3 mb-6">
+              <div className="grid grid-cols-3 gap-3 mb-6">
                 <div className="bg-gray-800 rounded-xl p-3 text-center">
                   <Send className="w-4 h-4 text-blue-400 mx-auto mb-1" />
                   <p className="text-white font-bold">{selectedCampaign.sent_count}</p>
                   <p className="text-gray-500 text-xs">Sent</p>
+                </div>
+                <div className="bg-gray-800 rounded-xl p-3 text-center">
+                  <Eye className="w-4 h-4 text-pink-400 mx-auto mb-1" />
+                  <p className="text-white font-bold">{selectedCampaign.open_count || 0}</p>
+                  <p className="text-gray-500 text-xs">
+                    Opened
+                    {selectedCampaign.sent_count > 0 && (
+                      <span className="text-gray-600">
+                        {' '}({Math.round(((selectedCampaign.open_count || 0) / selectedCampaign.sent_count) * 100)}%)
+                      </span>
+                    )}
+                  </p>
                 </div>
                 <div className="bg-gray-800 rounded-xl p-3 text-center">
                   <Users className="w-4 h-4 text-violet-400 mx-auto mb-1" />
@@ -394,13 +421,31 @@ function EmailCampaigns() {
               <div className="space-y-2 max-h-64 overflow-y-auto">
                 {recipients.map(r => (
                   <div key={r.id} className="flex items-center justify-between bg-gray-800 rounded-xl px-4 py-3">
-                    <div>
+                    <div className="min-w-0 flex-1">
                       <p className="text-white text-sm">{r.name || r.email}</p>
-                      <p className="text-gray-500 text-xs">{r.email}</p>
+                      <p className="text-gray-500 text-xs truncate">{r.email}</p>
+                      {r.opened && r.opened_at && (
+                        <p className="text-pink-400/80 text-[10px] mt-0.5 flex items-center gap-1">
+                          <Eye className="w-2.5 h-2.5" />
+                          Opened <TimeAgo dateString={r.opened_at} />
+                        </p>
+                      )}
                     </div>
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${r.status === 'sent' ? 'bg-green-500/10 text-green-400 border border-green-500/30' : 'bg-red-500/10 text-red-400 border border-red-500/30'}`}>
-                      {r.status}
-                    </span>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {r.status === 'sent' && (
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full border flex items-center gap-1 ${
+                          r.opened
+                            ? 'bg-pink-500/10 text-pink-400 border-pink-500/30'
+                            : 'bg-gray-700/50 text-gray-500 border-gray-700'
+                        }`}>
+                          <Eye className="w-2.5 h-2.5" />
+                          {r.opened ? 'Opened' : 'Unopened'}
+                        </span>
+                      )}
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${r.status === 'sent' ? 'bg-green-500/10 text-green-400 border border-green-500/30' : 'bg-red-500/10 text-red-400 border border-red-500/30'}`}>
+                        {r.status}
+                      </span>
+                    </div>
                   </div>
                 ))}
               </div>

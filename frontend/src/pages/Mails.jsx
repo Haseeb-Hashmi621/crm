@@ -430,6 +430,8 @@ function EmailDetail({ emailId, folder, onBack, onReply, onForward, onDelete, on
   const [fwdBody, setFwdBody] = useState('')
   const [sending, setSending] = useState(false)
   const [contacts, setContacts] = useState([])
+  const [aiChecklist, setAiChecklist] = useState(null)
+  const [aiWarnings, setAiWarnings] = useState([])
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -438,6 +440,8 @@ function EmailDetail({ emailId, folder, onBack, onReply, onForward, onDelete, on
     setAiSummary(null)
     setShowReplyBox(false)
     setShowForwardBox(false)
+    setAiChecklist(null)
+    setAiWarnings([])
     api.get(`/mail/${emailId}`)
       .then(r => setEmail(r.data))
       .catch(() => toast.error('Failed to load email'))
@@ -471,6 +475,8 @@ function EmailDetail({ emailId, folder, onBack, onReply, onForward, onDelete, on
       toast.success('Reply sent!')
       setShowReplyBox(false)
       setReplyBody('')
+      setAiChecklist(null)
+      setAiWarnings([])
       onRefresh?.()
     } catch {
       toast.error('Failed to send reply')
@@ -520,25 +526,34 @@ function EmailDetail({ emailId, folder, onBack, onReply, onForward, onDelete, on
     }
   }
 
+  // ── AI Reply — now uses the dedicated two-pass email endpoint ──────────────
   const handleAiReply = async () => {
     if (!email?.body) return
     setAiLoading(true)
+    setAiChecklist(null)
+    setAiWarnings([])
     try {
-      const res = await api.post('/ai/suggest-reply', {
-        contact_name: email.sender_name || email.sender_email,
-        messages: [{
-          type: 'email',
-          content: `Subject: ${email.subject}\n\n${email.body}`,
-          created_at: email.created_at,
-        }]
+      const res = await api.post('/ai/generate-email-reply', {
+        email_body: email.body,
+        email_subject: email.subject || '',
+        sender_name: email.sender_name || email.sender_email || 'the sender',
       })
-      const suggestion = res.data.suggestions?.[0]
-      if (suggestion) {
-        setReplyBody(suggestion)
+      if (res.data.draft) {
+        setReplyBody(res.data.draft)
         setShowReplyBox(true)
+        setAiChecklist(res.data.checklist || [])
+        setAiWarnings(res.data.warnings || [])
+        if (res.data.warnings?.length > 0) {
+          toast(
+            `Draft ready — please double-check: ${res.data.warnings.join(', ')}`,
+            { icon: '⚠️', duration: 6000 }
+          )
+        } else {
+          toast.success(`Draft addresses all ${res.data.item_count} point${res.data.item_count !== 1 ? 's' : ''} raised`)
+        }
       }
-    } catch {
-      toast.error('AI reply failed')
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'AI reply generation failed')
     } finally {
       setAiLoading(false)
     }
@@ -673,6 +688,7 @@ function EmailDetail({ emailId, folder, onBack, onReply, onForward, onDelete, on
             onClick={handleAiReply}
             disabled={aiLoading}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border bg-gray-800 text-gray-400 border-gray-700 hover:text-violet-400 hover:border-violet-500/40 transition-colors disabled:opacity-40"
+            title="Generates a full reply addressing every point raised in the email"
           >
             {aiLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
             AI Reply
@@ -745,24 +761,72 @@ function EmailDetail({ emailId, folder, onBack, onReply, onForward, onDelete, on
               <div className="text-xs text-gray-500 mb-2">
                 Replying to <span className="text-violet-400">{email.sender_email}</span>
               </div>
+
+              {/* AI checklist coverage indicator */}
+              {aiChecklist && aiChecklist.length > 0 && (
+                <div className="mb-3 p-3 bg-violet-500/5 border border-violet-500/15 rounded-xl">
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <Sparkles className="w-3 h-3 text-violet-400" />
+                    <span className="text-violet-400 text-[10px] font-semibold uppercase tracking-wide">
+                      AI addressed {aiChecklist.length} point{aiChecklist.length !== 1 ? 's' : ''} from this email
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {aiChecklist.map(item => {
+                      const isWarned = aiWarnings.includes(item.request)
+                      return (
+                        <span
+                          key={item.id}
+                          className={`text-[10px] px-2 py-0.5 rounded-full border flex items-center gap-1 ${
+                            isWarned
+                              ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30'
+                              : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                          }`}
+                          title={item.request}
+                        >
+                          {isWarned ? <AlertCircle className="w-2.5 h-2.5" /> : <Check className="w-2.5 h-2.5" />}
+                          {item.request.length > 30 ? item.request.slice(0, 30) + '…' : item.request}
+                        </span>
+                      )
+                    })}
+                  </div>
+                  {aiWarnings.length > 0 && (
+                    <p className="text-yellow-400/80 text-[10px] mt-2 flex items-start gap-1">
+                      <AlertCircle className="w-3 h-3 flex-shrink-0 mt-0.5" />
+                      Please review — these points may need a manual check before sending.
+                    </p>
+                  )}
+                </div>
+              )}
+
               <textarea
                 value={replyBody}
                 onChange={e => setReplyBody(e.target.value)}
                 placeholder="Write your reply..."
-                rows={4}
+                rows={6}
                 className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-violet-500 transition-colors resize-none"
                 autoFocus
               />
-              <div className="flex gap-2 mt-3">
-                <button onClick={() => setShowReplyBox(false)}
-                  className="px-3 py-2 text-xs text-gray-400 hover:text-white border border-gray-700 rounded-lg transition-colors">
-                  Cancel
+              <div className="flex items-center justify-between mt-3">
+                <button
+                  onClick={handleAiReply}
+                  disabled={aiLoading}
+                  className="flex items-center gap-1.5 text-xs text-violet-400 hover:text-violet-300 transition-colors disabled:opacity-40"
+                >
+                  {aiLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                  {aiChecklist ? 'Regenerate with AI' : 'Generate with AI'}
                 </button>
-                <motion.button whileTap={{ scale: 0.97 }} onClick={handleReply} disabled={sending || !replyBody.trim()}
-                  className="flex items-center gap-1.5 px-4 py-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white rounded-lg text-xs font-medium transition-colors">
-                  {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                  {sending ? 'Sending...' : 'Send Reply'}
-                </motion.button>
+                <div className="flex gap-2">
+                  <button onClick={() => { setShowReplyBox(false); setAiChecklist(null); setAiWarnings([]) }}
+                    className="px-3 py-2 text-xs text-gray-400 hover:text-white border border-gray-700 rounded-lg transition-colors">
+                    Cancel
+                  </button>
+                  <motion.button whileTap={{ scale: 0.97 }} onClick={handleReply} disabled={sending || !replyBody.trim()}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white rounded-lg text-xs font-medium transition-colors">
+                    {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                    {sending ? 'Sending...' : 'Send Reply'}
+                  </motion.button>
+                </div>
               </div>
             </div>
           </motion.div>

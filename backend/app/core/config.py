@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     TWILIO_PHONE_NUMBER: str
     TWILIO_WHATSAPP_NUMBER: str = "whatsapp:+14155238886"
     GROQ_API_KEY: str = ""
+    PUBLIC_BACKEND_URL: str = "http://127.0.0.1:8000"
 
     class Config:
         env_file = ".env"

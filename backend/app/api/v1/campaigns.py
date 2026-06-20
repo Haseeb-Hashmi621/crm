@@ -1,8 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
+from app.models.campaign import Campaign, CampaignRecipient
 from app.schemas.campaign import CampaignCreate, CampaignUpdate, CampaignResponse, CampaignRecipientResponse, SendCampaignRequest
 from app.services.campaign_service import (
     get_campaigns, get_campaign, create_campaign,
@@ -10,8 +12,47 @@ from app.services.campaign_service import (
     get_campaign_recipients
 )
 from typing import List
+from datetime import datetime, timezone
+import base64
 
 router = APIRouter()
+
+# 1x1 transparent GIF bytes
+PIXEL_GIF = base64.b64decode(
+    "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+)
+
+
+@router.get("/track/{campaign_id}/{recipient_id}/open.gif")
+async def track_open(
+    campaign_id: str,
+    recipient_id: str,
+    db: Session = Depends(get_db),
+):
+    """Pixel tracking endpoint — increments open count when email is viewed."""
+    recipient = db.query(CampaignRecipient).filter(
+        CampaignRecipient.id == recipient_id,
+        CampaignRecipient.campaign_id == campaign_id,
+    ).first()
+
+    if recipient and not recipient.opened:
+        recipient.opened = True
+        recipient.opened_at = datetime.now(timezone.utc)
+        # Increment campaign open_count
+        campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+        if campaign:
+            campaign.open_count = (campaign.open_count or 0) + 1
+        db.commit()
+
+    return Response(
+        content=PIXEL_GIF,
+        media_type="image/gif",
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        }
+    )
 
 
 @router.get("/", response_model=List[CampaignResponse])
