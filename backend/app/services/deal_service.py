@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 from app.models.deal import Deal
 from app.models.contact import Contact
 from app.models.task import Task
+from app.models.deal_stage_history import DealStageHistory
 from app.schemas.deal import DealCreate, DealUpdate
 from app.services.notification_service import create_notification
 from typing import List, Optional
@@ -30,6 +31,17 @@ def get_deal(db: Session, deal_id: str, user_id: uuid.UUID) -> Optional[Deal]:
     return db.query(Deal).filter(Deal.id == deal_id, Deal.user_id == user_id).first()
 
 
+def _log_stage_change(db: Session, deal_id, user_id, from_stage: Optional[str], to_stage: str):
+    """Record a stage transition. Called on creation (from_stage=None) and every change."""
+    history = DealStageHistory(
+        deal_id=deal_id,
+        user_id=user_id,
+        from_stage=from_stage,
+        to_stage=to_stage,
+    )
+    db.add(history)
+
+
 def create_deal(db: Session, deal_data: DealCreate, user_id: uuid.UUID) -> Deal:
     contact_name = deal_data.contact_name
 
@@ -49,6 +61,10 @@ def create_deal(db: Session, deal_data: DealCreate, user_id: uuid.UUID) -> Deal:
         user_id=user_id
     )
     db.add(db_deal)
+    db.flush()  # get db_deal.id before commit
+
+    _log_stage_change(db, db_deal.id, user_id, None, db_deal.stage or "new")
+
     db.commit()
     db.refresh(db_deal)
 
@@ -85,6 +101,10 @@ def update_deal(db: Session, deal_id: str, deal_data: DealUpdate, user_id: uuid.
     db.refresh(deal)
 
     if deal_data.stage and deal_data.stage != old_stage:
+        # Log the transition for velocity analytics
+        _log_stage_change(db, deal.id, user_id, old_stage, deal_data.stage)
+        db.commit()
+
         # Notification
         create_notification(
             db, user_id,

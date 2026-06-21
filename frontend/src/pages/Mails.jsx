@@ -23,6 +23,12 @@ const FOLDERS = [
   { id: 'trash',  label: 'Trash',  icon: Trash2,   color: 'text-red-400' },
 ]
 
+// Minimum word count in the body before we treat "AI Draft" as a multi-point
+// expansion task (checklist endpoint) instead of a from-scratch generation
+// (short suggest-reply endpoint). Below this, there's nothing substantial to
+// extract a checklist from, so the simple endpoint is faster and sufficient.
+const CHECKLIST_WORD_THRESHOLD = 12
+
 // ── Helpers ────────────────────────────────────────────────
 
 function formatDate(dateStr) {
@@ -70,6 +76,8 @@ function ComposeModal({ initial = {}, onClose, onSent, currentUser }) {
   const [contactSearch, setContactSearch] = useState('')
   const [showContactPicker, setShowContactPicker] = useState(false)
   const [aiLoading, setAiLoading] = useState(false)
+  const [aiChecklist, setAiChecklist] = useState(null)
+  const [aiWarnings, setAiWarnings] = useState([])
   const isDraft = !!initial.id && initial.folder === 'drafts'
   const [draftId, setDraftId] = useState(initial.id || null)
 
@@ -130,26 +138,65 @@ function ComposeModal({ initial = {}, onClose, onSent, currentUser }) {
     }
   }
 
+  // ── AI Draft — routes to the right endpoint based on what's actually in the body ──
+  //
+  // Two real scenarios this button needs to handle:
+  //  1. Body is empty/short (just a subject, or a one-liner) → there's nothing to
+  //     extract a checklist FROM, so we ask the short-form endpoint to generate
+  //     something from scratch based on the subject.
+  //  2. Body already has substantial text — e.g. the user typed several questions
+  //     or points they want expanded into a full email — this is exactly the
+  //     two-pass checklist endpoint's job, just using the user's own draft as the
+  //     "source" instead of a received email.
   const handleAiSuggest = async () => {
-    if (!form.subject.trim()) { toast.error('Add a subject first'); return }
+    if (!form.subject.trim() && !form.body.trim()) {
+      toast.error('Add a subject or some notes first')
+      return
+    }
     setAiLoading(true)
+    setAiChecklist(null)
+    setAiWarnings([])
+
+    const bodyWordCount = form.body.trim().split(/\s+/).filter(Boolean).length
+
     try {
-      // Ask Groq to draft a professional email
-      const res = await api.post('/ai/suggest-reply', {
-        contact_name: form.to || 'the recipient',
-        messages: [{
-          type: 'email',
-          content: `[Context] Drafting email with subject: "${form.subject}". ${form.body ? 'Current draft: ' + form.body : ''}`,
-          created_at: new Date().toISOString(),
-        }]
-      })
-      const suggestion = res.data.suggestions?.[0]
-      if (suggestion) {
-        setForm(prev => ({ ...prev, body: suggestion }))
-        toast.success('AI draft generated!')
+      if (bodyWordCount >= CHECKLIST_WORD_THRESHOLD) {
+        // Substantial draft already written — treat it as a checklist of points
+        // to expand into a full professional email.
+        const res = await api.post('/ai/generate-email-reply', {
+          email_body: form.body,
+          email_subject: form.subject || '(no subject)',
+          sender_name: form.to || 'the recipient',
+          extra_context: 'This is a NEW outgoing email being composed, not a reply. The text above is the sender\'s own rough notes/draft — expand it into a complete, professional email addressing every point raised, written from the sender\'s perspective.',
+        })
+        if (res.data.draft) {
+          setForm(prev => ({ ...prev, body: res.data.draft }))
+          setAiChecklist(res.data.checklist || [])
+          setAiWarnings(res.data.warnings || [])
+          if (res.data.warnings?.length > 0) {
+            toast(`Draft expanded — please double-check: ${res.data.warnings.join(', ')}`, { icon: '⚠️', duration: 6000 })
+          } else {
+            toast.success(`Draft addresses all ${res.data.item_count} point${res.data.item_count !== 1 ? 's' : ''} from your notes`)
+          }
+        }
+      } else {
+        // Short/empty body — generate from scratch based on subject only.
+        const res = await api.post('/ai/suggest-reply', {
+          contact_name: form.to || 'the recipient',
+          messages: [{
+            type: 'email',
+            content: `[Context] Drafting a new email with subject: "${form.subject}". ${form.body ? 'Starting notes: ' + form.body : ''}`,
+            created_at: new Date().toISOString(),
+          }]
+        })
+        const suggestion = res.data.suggestions?.[0]
+        if (suggestion) {
+          setForm(prev => ({ ...prev, body: suggestion }))
+          toast.success('AI draft generated!')
+        }
       }
-    } catch {
-      toast.error('AI generation failed')
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'AI generation failed')
     } finally {
       setAiLoading(false)
     }
@@ -290,12 +337,43 @@ function ComposeModal({ initial = {}, onClose, onSent, currentUser }) {
           />
         </div>
 
+        {/* AI checklist coverage indicator (Compose) */}
+        {aiChecklist && aiChecklist.length > 0 && (
+          <div className="mx-5 mt-3 p-3 bg-violet-500/5 border border-violet-500/15 rounded-xl">
+            <div className="flex items-center gap-1.5 mb-2">
+              <Sparkles className="w-3 h-3 text-violet-400" />
+              <span className="text-violet-400 text-[10px] font-semibold uppercase tracking-wide">
+                AI expanded {aiChecklist.length} point{aiChecklist.length !== 1 ? 's' : ''} from your notes
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {aiChecklist.map(item => {
+                const isWarned = aiWarnings.includes(item.request)
+                return (
+                  <span
+                    key={item.id}
+                    className={`text-[10px] px-2 py-0.5 rounded-full border flex items-center gap-1 ${
+                      isWarned
+                        ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30'
+                        : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                    }`}
+                    title={item.request}
+                  >
+                    {isWarned ? <AlertCircle className="w-2.5 h-2.5" /> : <Check className="w-2.5 h-2.5" />}
+                    {item.request.length > 30 ? item.request.slice(0, 30) + '…' : item.request}
+                  </span>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Body */}
         <div className="px-5 py-3">
           <textarea
             value={form.body}
             onChange={e => setForm({ ...form, body: e.target.value })}
-            placeholder="Write your message here..."
+            placeholder="Write your message here... (jot down a few points and hit AI Draft to expand them into a full email)"
             rows={10}
             className="w-full bg-transparent text-white text-sm focus:outline-none resize-none placeholder-gray-600 leading-relaxed"
           />
@@ -318,8 +396,8 @@ function ComposeModal({ initial = {}, onClose, onSent, currentUser }) {
           <button
             onClick={handleAiSuggest}
             disabled={aiLoading}
-            className="flex items-center gap-1.5 px-3 py-2 bg-violet-900/60 hover:bg-violet-800/80 border border-violet-700/40 text-violet-300 rounded-xl text-xs transition-colors"
-            title="AI draft"
+            className="flex items-center gap-1.5 px-3 py-2 bg-violet-900/60 hover:bg-violet-800/80 border border-violet-700/40 text-violet-300 rounded-xl text-xs transition-colors disabled:opacity-50"
+            title="If your draft has several points written, AI will expand all of them into a full email"
           >
             {aiLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
             AI Draft
@@ -526,7 +604,7 @@ function EmailDetail({ emailId, folder, onBack, onReply, onForward, onDelete, on
     }
   }
 
-  // ── AI Reply — now uses the dedicated two-pass email endpoint ──────────────
+  // ── AI Reply — uses the dedicated two-pass email endpoint ───────────────────
   const handleAiReply = async () => {
     if (!email?.body) return
     setAiLoading(true)

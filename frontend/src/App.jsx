@@ -1,3 +1,4 @@
+// frontend/src/App.jsx  — REPLACE ENTIRE FILE
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Login from './pages/Login'
 import Signup from './pages/Signup'
@@ -19,6 +20,7 @@ import useInboundNotifications from './hooks/useInboundNotifications'
 import Tasks from './pages/Tasks'
 import Mails from './pages/Mails'
 import AdminPanel from './pages/AdminPanel'
+import Analytics from './pages/Analytics'
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated } = useAuthStore()
@@ -47,6 +49,7 @@ function App() {
           <Route path="deals" element={<Deals />} />
           <Route path="deals/:id" element={<DealDetail />} />
           <Route path="revenue" element={<Revenue />} />
+          <Route path="analytics" element={<Analytics />} />
           <Route path="settings" element={<Settings />} />
           <Route path="campaigns" element={<Campaigns />} />
           <Route path="segments" element={<Segments />} />

@@ -1,9 +1,12 @@
+// frontend/src/pages/Dashboard.jsx  — REPLACE ENTIRE FILE
+// Adds Analytics nav item (between Revenue and Campaigns) + keeps existing
+// role-aware Admin item from the previous session.
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import {
   Users, TrendingUp, DollarSign, Activity, LogOut,
   Settings, Mail, Filter, FileText, Inbox,
-  MessageCircle, CheckSquare, Shield
+  MessageCircle, CheckSquare, Shield, BarChart3
 } from 'lucide-react'
 import useAuthStore from '../store/authStore'
 import { useNavigate, useLocation, Outlet } from 'react-router-dom'
@@ -18,6 +21,7 @@ const baseNavItems = [
   { label: 'Deals',         icon: TrendingUp,    path: '/dashboard/deals' },
   { label: 'Tasks',         icon: CheckSquare,   path: '/dashboard/tasks' },
   { label: 'Revenue',       icon: DollarSign,    path: '/dashboard/revenue' },
+  { label: 'Analytics',     icon: BarChart3,     path: '/dashboard/analytics' },
   { label: 'Campaigns',     icon: Mail,          path: '/dashboard/campaigns' },
   { label: 'Segments',      icon: Filter,        path: '/dashboard/segments' },
   { label: 'Templates',     icon: FileText,      path: '/dashboard/templates' },

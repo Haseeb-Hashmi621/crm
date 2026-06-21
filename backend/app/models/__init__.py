@@ -12,3 +12,4 @@ from .segment import Segment
 from .email_template import EmailTemplate
 from .task import Task
 from .mail import Email
+from .deal_stage_history import DealStageHistory
