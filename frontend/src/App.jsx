@@ -21,6 +21,7 @@ import Tasks from './pages/Tasks'
 import Mails from './pages/Mails'
 import AdminPanel from './pages/AdminPanel'
 import Analytics from './pages/Analytics'
+import Products from './pages/Products'
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated } = useAuthStore()
@@ -59,6 +60,7 @@ function App() {
           <Route path="tasks" element={<Tasks />} />
           <Route path="mail" element={<Mails />} />
           <Route path="admin" element={<AdminPanel />} />
+          <Route path="products" element={<Products />} />
         </Route>
         <Route path="/" element={<Navigate to="/login" />} />
       </Routes>

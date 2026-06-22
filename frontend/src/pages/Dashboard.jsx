@@ -6,7 +6,8 @@ import { motion } from 'framer-motion'
 import {
   Users, TrendingUp, DollarSign, Activity, LogOut,
   Settings, Mail, Filter, FileText, Inbox,
-  MessageCircle, CheckSquare, Shield, BarChart3
+  MessageCircle, CheckSquare, Shield, BarChart3,
+  Package
 } from 'lucide-react'
 import useAuthStore from '../store/authStore'
 import { useNavigate, useLocation, Outlet } from 'react-router-dom'
@@ -28,6 +29,7 @@ const baseNavItems = [
   { label: 'Inbox',         icon: Inbox,         path: '/dashboard/inbox' },
   { label: 'Mail',          icon: Mail,          path: '/dashboard/mail' },
   { label: 'Settings',      icon: Settings,      path: '/dashboard/settings' },
+  { label: 'Products',      icon: Package,       path: '/dashboard/products' },
 ]
 
 const adminNavItem = { label: 'Admin', icon: Shield, path: '/dashboard/admin' }

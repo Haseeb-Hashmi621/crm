@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Users, TrendingUp, DollarSign, Activity, MessageSquare, PhoneCall, Send, Calendar, Phone, MessageCircle, CheckSquare, AlertCircle, Clock } from 'lucide-react'
+import { Users, TrendingUp, DollarSign, Activity, MessageSquare, PhoneCall, Send, Calendar, Phone, MessageCircle, CheckSquare, AlertCircle, Clock, Package } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import api from '../services/api'
 
