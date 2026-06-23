@@ -24,6 +24,7 @@ import Analytics from './pages/Analytics'
 import Products from './pages/Products'
 import Quotes from './pages/Quotes'
 import Invoices from './pages/Invoices'
+import Forms from './pages/Forms'
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated } = useAuthStore()
@@ -65,6 +66,7 @@ function App() {
           <Route path="products" element={<Products />} />
           <Route path="quotes" element={<Quotes />} />
           <Route path="invoices" element={<Invoices />} />
+          <Route path="forms" element={<Forms />} />
         </Route>
         <Route path="/" element={<Navigate to="/login" />} />
       </Routes>

@@ -17,6 +17,7 @@ from app.models.tag import contact_tags
 from app.models.segment import Segment
 from app.models.mail import Email
 from app.models.deal_stage_history import DealStageHistory
+from app.models.form import Form, FormSubmission
 
 config = context.config
 

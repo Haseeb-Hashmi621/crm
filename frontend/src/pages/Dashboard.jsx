@@ -31,7 +31,8 @@ const baseNavItems = [
   { label: 'Settings',      icon: Settings,      path: '/dashboard/settings' },
   { label: 'Products',      icon: Package,       path: '/dashboard/products' },
   { label: 'Quotes',        icon: FileText ,     path: '/dashboard/quotes' },
-  { label: 'Invoices',      icon: Receipt,   path: '/dashboard/invoices' },
+  { label: 'Invoices',      icon: Receipt,       path: '/dashboard/invoices' },
+  { label: 'Forms',         icon: FileText,       path: '/dashboard/forms' },
 ]
 
 const adminNavItem = { label: 'Admin', icon: Shield, path: '/dashboard/admin' }
