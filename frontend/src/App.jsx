@@ -22,6 +22,8 @@ import Mails from './pages/Mails'
 import AdminPanel from './pages/AdminPanel'
 import Analytics from './pages/Analytics'
 import Products from './pages/Products'
+import Quotes from './pages/Quotes'
+import Invoices from './pages/Invoices'
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated } = useAuthStore()
@@ -61,6 +63,8 @@ function App() {
           <Route path="mail" element={<Mails />} />
           <Route path="admin" element={<AdminPanel />} />
           <Route path="products" element={<Products />} />
+          <Route path="quotes" element={<Quotes />} />
+          <Route path="invoices" element={<Invoices />} />
         </Route>
         <Route path="/" element={<Navigate to="/login" />} />
       </Routes>

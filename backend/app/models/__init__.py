@@ -14,3 +14,4 @@ from .task import Task
 from .mail import Email
 from .deal_stage_history import DealStageHistory
 from .product import Product
+from .invoice import Invoice, InvoiceLineItem

@@ -20,6 +20,8 @@ from app.api.v1.tasks import router as tasks_router
 from app.api.v1.mails import router as mail_router
 from app.api.v1.admin import router as admin_router
 from app.api.v1.products import router as products_router
+from app.api.v1.quotes import router as quotes_router
+from app.api.v1.invoices import router as invoices_router
 
 app = FastAPI(
     title="CRM API",
@@ -55,6 +57,8 @@ app.include_router(tasks_router, prefix="/tasks", tags=["Tasks"])
 app.include_router(mail_router, prefix="/mail", tags=["Mails"])
 app.include_router(admin_router, prefix="/admin", tags=["Admin"])
 app.include_router(products_router, prefix="/products", tags=["Products"])
+app.include_router(quotes_router, prefix="/quotes", tags=["Quotes"])
+app.include_router(invoices_router, prefix="/invoices", tags=["Invoices"])
 
 @app.get("/")
 def root():

@@ -7,7 +7,7 @@ import {
   Users, TrendingUp, DollarSign, Activity, LogOut,
   Settings, Mail, Filter, FileText, Inbox,
   MessageCircle, CheckSquare, Shield, BarChart3,
-  Package
+  Package, Receipt 
 } from 'lucide-react'
 import useAuthStore from '../store/authStore'
 import { useNavigate, useLocation, Outlet } from 'react-router-dom'
@@ -30,6 +30,8 @@ const baseNavItems = [
   { label: 'Mail',          icon: Mail,          path: '/dashboard/mail' },
   { label: 'Settings',      icon: Settings,      path: '/dashboard/settings' },
   { label: 'Products',      icon: Package,       path: '/dashboard/products' },
+  { label: 'Quotes',        icon: FileText ,     path: '/dashboard/quotes' },
+  { label: 'Invoices',      icon: Receipt,   path: '/dashboard/invoices' },
 ]
 
 const adminNavItem = { label: 'Admin', icon: Shield, path: '/dashboard/admin' }
