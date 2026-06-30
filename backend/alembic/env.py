@@ -18,6 +18,7 @@ from app.models.segment import Segment
 from app.models.mail import Email
 from app.models.deal_stage_history import DealStageHistory
 from app.models.form import Form, FormSubmission
+from app.models.calendar_event import CalendarEvent
 
 config = context.config
 
