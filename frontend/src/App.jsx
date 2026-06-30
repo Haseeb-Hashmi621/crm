@@ -25,6 +25,7 @@ import Products from './pages/Products'
 import Quotes from './pages/Quotes'
 import Invoices from './pages/Invoices'
 import Forms from './pages/Forms'
+import CalendarPage from './pages/Calendar'
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated } = useAuthStore()
@@ -67,6 +68,7 @@ function App() {
           <Route path="quotes" element={<Quotes />} />
           <Route path="invoices" element={<Invoices />} />
           <Route path="forms" element={<Forms />} />
+          <Route path="calendar" element={<CalendarPage />} />
         </Route>
         <Route path="/" element={<Navigate to="/login" />} />
       </Routes>
