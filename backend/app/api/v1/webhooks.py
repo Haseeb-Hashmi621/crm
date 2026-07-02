@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models.contact import Contact
 from app.models.activity import Activity
+from app.services import chatbot_service, conversation_service
 
 router = APIRouter()
 
@@ -84,12 +85,59 @@ async def twilio_whatsapp_inbound(request: Request, db: Session = Depends(get_db
     contact = _find_contact_by_phone(db, from_number)
 
     if contact:
-        activity = Activity(
+        inbound_activity = Activity(
             contact_id=contact.id,
             type="whatsapp",
             content=f"[Inbound] {body}",
         )
-        db.add(activity)
+        db.add(inbound_activity)
         db.commit()
+
+        # ── Chatbot auto-reply ──────────────────────────────────────────────
+        # Only fires if both the user's global bot switch AND this contact's
+        # per-conversation switch are on. Any failure here is swallowed —
+        # a bot hiccup must never break inbound message logging.
+        try:
+            if chatbot_service.should_auto_reply(db, contact):
+                history = (
+                    db.query(Activity)
+                    .filter(Activity.contact_id == contact.id)
+                    .order_by(Activity.created_at.asc())
+                    .all()
+                )
+                conversation_history = [
+                    {
+                        "type": a.type or "note",
+                        "content": a.content,
+                        "created_at": a.created_at.isoformat() if a.created_at else None,
+                    }
+                    for a in history
+                ]
+
+                contact_name = f"{contact.first_name or ''} {contact.last_name or ''}".strip() or "Customer"
+
+                reply_text = chatbot_service.generate_bot_reply(
+                    db=db,
+                    user_id=contact.user_id,
+                    contact_name=contact_name,
+                    conversation_history=conversation_history,
+                )
+
+                result = conversation_service.send_message(
+                    db=db,
+                    user_id=contact.user_id,
+                    contact_id=str(contact.id),
+                    channel="whatsapp",
+                    content=reply_text,
+                )
+
+                # Mark this outbound activity as bot-generated so the UI can
+                # distinguish it from a human agent's reply.
+                if "activity" in result:
+                    result["activity"].is_bot = True
+                    db.commit()
+        except Exception:
+            # Never let a bot failure break the webhook response to Twilio.
+            db.rollback()
 
     return Response(content="<Response/>", media_type="text/xml")
