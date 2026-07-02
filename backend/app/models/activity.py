@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, ForeignKey, Text
+from sqlalchemy import Column, String, DateTime, ForeignKey, Text, Boolean
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -14,5 +14,10 @@ class Activity(Base):
     type = Column(String, default="note")
     content = Column(Text, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # True  = sent automatically by the chatbot
+    # False = sent by a human agent
+    # NULL  = pre-existing rows / inbound messages / unknown
+    is_bot = Column(Boolean, nullable=True, default=False)
 
     contact = relationship("Contact", lazy="select")

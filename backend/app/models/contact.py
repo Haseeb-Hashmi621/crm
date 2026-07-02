@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, String, DateTime, ForeignKey
+from sqlalchemy import Column, String, DateTime, ForeignKey, Boolean
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -22,5 +22,9 @@ class Contact(Base):
     )
     workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Per-contact bot toggle — lets staff silence the chatbot for one
+    # conversation (human takeover) without affecting the global switch.
+    chatbot_enabled = Column(Boolean, nullable=False, default=True)
 
     tags = relationship("Tag", secondary=contact_tags, lazy="select")
