@@ -24,6 +24,7 @@ from app.api.v1.quotes import router as quotes_router
 from app.api.v1.invoices import router as invoices_router
 from app.api.v1.forms import router as forms_router
 from app.api.v1.calendar import router as calendar_router
+from app.api.v1.chatbot import router as chatbot_router
 
 app = FastAPI(
     title="CRM API",
@@ -63,6 +64,7 @@ app.include_router(quotes_router, prefix="/quotes", tags=["Quotes"])
 app.include_router(invoices_router, prefix="/invoices", tags=["Invoices"])
 app.include_router(forms_router, prefix="/forms", tags=["Forms"])
 app.include_router(calendar_router, prefix="/calendar", tags=["Calendar"])
+app.include_router(chatbot_router, prefix="/chatbot", tags=["Chatbot"])
 
 @app.get("/")
 def root():
