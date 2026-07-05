@@ -16,6 +16,7 @@ from typing import List
 
 router = APIRouter()
 
+
 @router.get("/count")
 def get_contacts_count(
     db: Session = Depends(get_db),
@@ -26,6 +27,7 @@ def get_contacts_count(
         Contact.user_id == current_user.id
     ).scalar()
     return {"total": total}
+
 
 @router.get("/export")
 def export_contacts(
@@ -43,7 +45,7 @@ def export_contacts(
             c.first_name or '',
             c.last_name or '',
             c.email or '',
-            f'=\"{c.phone}\"' if c.phone else '',
+            f'="{c.phone}"' if c.phone else '',
             c.company or '',
         ])
 
@@ -55,34 +57,83 @@ def export_contacts(
         headers={"Content-Disposition": "attachment; filename=contacts.csv"}
     )
 
+
 @router.get("/", response_model=List[ContactResponse])
-def list_contacts(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def list_contacts(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     return get_contacts(db, skip, limit, str(current_user.id))
 
+
 @router.post("/", response_model=ContactResponse)
-def add_contact(contact_data: ContactCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def add_contact(
+    contact_data: ContactCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     return create_contact(db, contact_data, str(current_user.id))
 
+
 @router.get("/{contact_id}", response_model=ContactResponse)
-def get_one_contact(contact_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def get_one_contact(
+    contact_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     contact = get_contact(db, contact_id, str(current_user.id))
     if not contact:
         raise HTTPException(status_code=404, detail="Contact not found")
     return contact
 
+
+@router.patch("/{contact_id}/toggle-chatbot", response_model=ContactResponse)
+def toggle_contact_chatbot(
+    contact_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Per-conversation human takeover switch — flips chatbot_enabled
+    without touching the global bot setting.
+    """
+    contact = get_contact(db, contact_id, str(current_user.id))
+    if not contact:
+        raise HTTPException(status_code=404, detail="Contact not found")
+
+    contact.chatbot_enabled = not contact.chatbot_enabled
+    db.commit()
+    db.refresh(contact)
+
+    return contact
+
+
 @router.put("/{contact_id}", response_model=ContactResponse)
-def edit_contact(contact_id: str, contact_data: ContactUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def edit_contact(
+    contact_id: str,
+    contact_data: ContactUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     contact = update_contact(db, contact_id, contact_data, str(current_user.id))
     if not contact:
         raise HTTPException(status_code=404, detail="Contact not found")
     return contact
 
+
 @router.delete("/{contact_id}")
-def remove_contact(contact_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def remove_contact(
+    contact_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     success = delete_contact(db, contact_id, str(current_user.id))
     if not success:
         raise HTTPException(status_code=404, detail="Contact not found")
     return {"message": "Contact deleted successfully"}
+
 
 @router.post("/import")
 async def import_contacts(

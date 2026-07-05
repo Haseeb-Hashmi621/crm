@@ -7,7 +7,7 @@ import {
   Users, TrendingUp, DollarSign, Activity, LogOut,
   Settings, Mail, Filter, FileText, Inbox,
   MessageCircle, CheckSquare, Shield, BarChart3,
-  Package, Receipt, CalendarDays
+  Package, Receipt, CalendarDays, Bot
 } from 'lucide-react'
 import useAuthStore from '../store/authStore'
 import { useNavigate, useLocation, Outlet } from 'react-router-dom'
@@ -34,6 +34,7 @@ const baseNavItems = [
   { label: 'Invoices',      icon: Receipt,       path: '/dashboard/invoices' },
   { label: 'Forms',         icon: FileText,      path: '/dashboard/forms' },
   { label: 'Calendar',      icon: CalendarDays,  path: '/dashboard/calendar' },
+  { label: 'Chatbot',       icon: Bot,           path: '/dashboard/chatbot' },
 ]
 
 const adminNavItem = { label: 'Admin', icon: Shield, path: '/dashboard/admin' }

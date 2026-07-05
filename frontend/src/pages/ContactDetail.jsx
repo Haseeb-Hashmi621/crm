@@ -5,7 +5,7 @@ import {
   ArrowLeft, Mail, Phone, Building2, Calendar,
   MessageSquare, PhoneCall, Send, Users,
   Plus, Trash2, Loader2, Edit2, X, Check, MessageCircle,
-  CheckSquare, Clock, AlertCircle
+  CheckSquare, Clock, AlertCircle, Bot
 } from 'lucide-react'
 import api from '../services/api'
 import toast from 'react-hot-toast'
@@ -334,6 +334,39 @@ export default function ContactDetail() {
                     </span>
                   </div>
                 )}
+
+                <div className="flex items-center justify-between text-sm pt-2 border-t border-gray-800 mt-1">
+                  <span className="text-gray-400 flex items-center gap-2">
+                    <Bot className="w-4 h-4 text-gray-500" />
+                    Chatbot for this contact
+                  </span>
+
+                  <button
+                    onClick={async () => {
+                      try {
+                        const res = await api.patch(`/contacts/${id}/toggle-chatbot`)
+                        setContact(prev => ({
+                          ...prev,
+                          chatbot_enabled: res.data.chatbot_enabled,
+                        }))
+                        toast.success(
+                          res.data.chatbot_enabled
+                            ? 'Bot re-enabled for this chat'
+                            : "Bot silenced — you're in control now"
+                        )
+                      } catch {
+                        toast.error('Failed to update')
+                      }
+                    }}
+                    className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                      contact?.chatbot_enabled
+                        ? 'bg-green-500/10 text-green-400 border-green-500/30'
+                        : 'bg-gray-700/50 text-gray-400 border-gray-700'
+                    }`}
+                  >
+                    {contact?.chatbot_enabled ? 'Bot Active' : 'Bot Silenced'}
+                  </button>
+                </div>
                 <motion.button
                   whileTap={{ scale: 0.97 }}
                   onClick={() => setEditing(true)}
