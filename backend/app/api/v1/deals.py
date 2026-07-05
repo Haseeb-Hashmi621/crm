@@ -3,6 +3,10 @@ Adds three analytics endpoints:
   GET /deals/analytics/funnel     — stage counts/values + conversion %
   GET /deals/analytics/velocity   — avg days spent per stage
   GET /deals/analytics/by-owner   — performance grouped by owner
+
+Feature #50 — AI Deal Scoring:
+  POST /deals/{deal_id}/score     — score a single deal
+  POST /deals/score-all           — bulk-score every open deal
 """
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -12,8 +16,9 @@ from app.core.deps import get_current_user
 from app.models.user import User
 from app.models.deal import Deal
 from app.models.deal_stage_history import DealStageHistory
-from app.schemas.deal import DealCreate, DealUpdate, DealResponse
+from app.schemas.deal import DealCreate, DealUpdate, DealResponse, DealScoreResponse, BulkScoreResponse
 from app.services.deal_service import get_deals, get_deal, create_deal, update_deal, delete_deal
+from app.services.ai_deal_scoring_service import score_deal, score_all_open_deals
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime
@@ -35,8 +40,8 @@ class FunnelStage(BaseModel):
     label: str
     count: int
     value: float
-    conversion_from_previous: Optional[float] = None   # % of previous stage that reached this one
-    conversion_from_start: Optional[float] = None       # % of total New Leads that reached this one
+    conversion_from_previous: Optional[float] = None
+    conversion_from_start: Optional[float] = None
 
 
 class FunnelResponse(BaseModel):
@@ -95,10 +100,6 @@ def get_funnel_analytics(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Conversion funnel: how many deals (and how much value) are at each stage,
-    plus conversion % from the previous stage and from the very start.
-    """
     deals = db.query(Deal).filter(Deal.user_id == current_user.id).all()
     total_deals = len(deals)
 
@@ -118,9 +119,6 @@ def get_funnel_analytics(
             counts[d.stage] += d.value and 1 or 1
             values[d.stage] += d.value or 0
 
-    # Funnel is cumulative — a deal currently at "negotiation" also passed through
-    # new/contacted/proposal. We approximate this using stage history: count distinct
-    # deals that have EVER reached each stage (not just deals currently sitting there).
     history_rows = db.query(DealStageHistory.deal_id, DealStageHistory.to_stage).filter(
         DealStageHistory.user_id == current_user.id
     ).all()
@@ -171,21 +169,15 @@ def get_velocity_analytics(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Average time (in days) deals spend in each stage before moving on.
-    Computed from DealStageHistory — pairs each 'entered stage X' event with
-    the next event for the same deal to get a duration.
-    """
     history = db.query(DealStageHistory).filter(
         DealStageHistory.user_id == current_user.id
     ).order_by(DealStageHistory.deal_id, DealStageHistory.entered_at.asc()).all()
 
-    # Group by deal_id, preserving chronological order
     by_deal = defaultdict(list)
     for h in history:
         by_deal[h.deal_id].append(h)
 
-    durations = defaultdict(list)  # stage -> list of day counts
+    durations = defaultdict(list)
 
     for deal_id, events in by_deal.items():
         for i in range(len(events) - 1):
@@ -198,7 +190,6 @@ def get_velocity_analytics(
                 delta_days = (end - start).total_seconds() / 86400
                 if delta_days >= 0:
                     durations[stage].append(delta_days)
-        # Last event — deal is still in this stage today, count time-so-far
         last = events[-1]
         if last.to_stage in STAGE_ORDER and last.to_stage not in ("won", "lost"):
             now = datetime.now(last.entered_at.tzinfo) if last.entered_at.tzinfo else datetime.utcnow()
@@ -225,7 +216,6 @@ def get_owner_analytics(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Deal performance grouped by the 'owner' field on each deal."""
     deals = db.query(Deal).filter(Deal.user_id == current_user.id).all()
 
     grouped = defaultdict(list)
@@ -259,6 +249,20 @@ def get_owner_analytics(
     owners.sort(key=lambda o: o.won_value, reverse=True)
 
     return OwnerPerformanceResponse(owners=owners)
+
+
+# ── AI Deal Scoring — Feature #50 ──────────────────────────────────────────────
+# Must come before /{deal_id} since "score-all" would otherwise be captured
+# as a deal_id path parameter.
+
+@router.post("/score-all", response_model=BulkScoreResponse)
+def bulk_score_deals(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Score every open (not won/lost) deal for the current user in one pass."""
+    result = score_all_open_deals(db, current_user.id)
+    return BulkScoreResponse(**result)
 
 
 # ── Existing CRUD endpoints (continued) ────────────────────────────────────────
@@ -315,3 +319,17 @@ def remove_deal(
     if not success:
         raise HTTPException(status_code=404, detail="Deal not found")
     return {"message": "Deal deleted successfully"}
+
+
+@router.post("/{deal_id}/score", response_model=DealScoreResponse)
+def score_one_deal(
+    deal_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Compute (or refresh) the AI win-likelihood score for a single deal."""
+    deal = get_deal(db, deal_id, current_user.id)
+    if not deal:
+        raise HTTPException(status_code=404, detail="Deal not found")
+    result = score_deal(db, deal)
+    return DealScoreResponse(**result)

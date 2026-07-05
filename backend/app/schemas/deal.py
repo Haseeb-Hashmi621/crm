@@ -1,6 +1,7 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from uuid import UUID
+from datetime import datetime
 
 
 class DealCreate(BaseModel):
@@ -32,6 +33,24 @@ class DealResponse(BaseModel):
     contact_name: Optional[str] = None
     company: Optional[str] = None
     owner: Optional[str] = None
+    ai_score: Optional[int] = None
+    ai_score_reasoning: Optional[str] = None
+    ai_score_factors: Optional[List[dict]] = None
+    ai_scored_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
+
+
+class DealScoreResponse(BaseModel):
+    deal_id: UUID
+    ai_score: int
+    ai_score_reasoning: str
+    ai_score_factors: List[dict]
+    ai_scored_at: datetime
+
+
+class BulkScoreResponse(BaseModel):
+    scored: int
+    failed: int
+    total: int

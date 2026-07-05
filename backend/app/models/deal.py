@@ -1,7 +1,7 @@
 import uuid
 
-from sqlalchemy import Column, String, Float, DateTime, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Column, String, Float, DateTime, ForeignKey, Integer, Text
+from sqlalchemy.dialects.postgresql import UUID, JSON
 from sqlalchemy.sql import func
 
 from app.core.database import Base
@@ -31,3 +31,9 @@ class Deal(Base):
     )
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # AI Deal Scoring (Feature #50)
+    ai_score = Column(Integer, nullable=True)               # 0-100 win-likelihood score
+    ai_score_reasoning = Column(Text, nullable=True)         # short natural-language explanation
+    ai_score_factors = Column(JSON, nullable=True)           # list of {label, impact, weight}
+    ai_scored_at = Column(DateTime(timezone=True), nullable=True)

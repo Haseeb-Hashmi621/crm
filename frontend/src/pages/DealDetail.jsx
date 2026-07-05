@@ -4,7 +4,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, DollarSign, Building2, User, Tag,
   MessageSquare, PhoneCall, Send, Users,
-  Plus, Trash2, Loader2, X, Check, Edit2, ExternalLink
+  Plus, Trash2, Loader2, X, Check, Edit2, ExternalLink,
+  Sparkles, TrendingUp, TrendingDown, Minus, RefreshCw
 } from 'lucide-react'
 import api from '../services/api'
 import toast from 'react-hot-toast'
@@ -48,6 +49,56 @@ function ActivityIcon({ type }) {
   )
 }
 
+function scoreColor(score) {
+  if (score === null || score === undefined) return { text: 'text-gray-500', bg: 'bg-gray-700', ring: '#6B7280' }
+  if (score >= 70) return { text: 'text-green-400', bg: 'bg-green-500', ring: '#22C55E' }
+  if (score >= 40) return { text: 'text-yellow-400', bg: 'bg-yellow-500', ring: '#EAB308' }
+  return { text: 'text-red-400', bg: 'bg-red-500', ring: '#EF4444' }
+}
+
+function ScoreGauge({ score }) {
+  const colors = scoreColor(score)
+  const pct = score ?? 0
+  const circumference = 2 * Math.PI * 34
+  const offset = circumference - (pct / 100) * circumference
+
+  return (
+    <div className="relative w-20 h-20 flex-shrink-0">
+      <svg width="80" height="80" viewBox="0 0 80 80" className="-rotate-90">
+        <circle cx="40" cy="40" r="34" fill="none" stroke="#1F2937" strokeWidth="8" />
+        <motion.circle
+          cx="40" cy="40" r="34" fill="none" stroke={colors.ring} strokeWidth="8"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          initial={{ strokeDashoffset: circumference }}
+          animate={{ strokeDashoffset: offset }}
+          transition={{ duration: 0.8, ease: 'easeOut' }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <span className={`text-lg font-bold ${colors.text}`}>{score ?? '—'}</span>
+      </div>
+    </div>
+  )
+}
+
+function FactorChip({ factor }) {
+  const isPositive = factor.impact === 'positive'
+  const isNegative = factor.impact === 'negative'
+  const Icon = isPositive ? TrendingUp : isNegative ? TrendingDown : Minus
+  const cls = isPositive
+    ? 'bg-green-500/10 text-green-400 border-green-500/30'
+    : isNegative
+    ? 'bg-red-500/10 text-red-400 border-red-500/30'
+    : 'bg-gray-700/50 text-gray-400 border-gray-700'
+  return (
+    <span className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border ${cls}`}>
+      <Icon className="w-3 h-3" />
+      {factor.label}
+    </span>
+  )
+}
+
 export default function DealDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -66,6 +117,9 @@ export default function DealDetail() {
   const [editing, setEditing] = useState(false)
   const [editForm, setEditForm] = useState({})
   const [saving, setSaving] = useState(false)
+
+  // AI Deal Scoring (Feature #50)
+  const [scoring, setScoring] = useState(false)
 
   useEffect(() => {
     fetchDeal()
@@ -100,6 +154,25 @@ export default function DealDetail() {
       console.error(err)
     } finally {
       setLoadingActivities(false)
+    }
+  }
+
+  const handleScoreDeal = async () => {
+    setScoring(true)
+    try {
+      const res = await api.post(`/deals/${id}/score`)
+      setDeal(prev => ({
+        ...prev,
+        ai_score: res.data.ai_score,
+        ai_score_reasoning: res.data.ai_score_reasoning,
+        ai_score_factors: res.data.ai_score_factors,
+        ai_scored_at: res.data.ai_scored_at,
+      }))
+      toast.success('AI score updated!')
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to score deal')
+    } finally {
+      setScoring(false)
     }
   }
 
@@ -141,7 +214,7 @@ export default function DealDetail() {
         ...editForm,
         value: parseFloat(editForm.value) || 0,
       })
-      setDeal(res.data)
+      setDeal(prev => ({ ...prev, ...res.data }))
       setEditing(false)
       toast.success('Deal updated!')
     } catch (err) {
@@ -154,7 +227,7 @@ export default function DealDetail() {
   const handleStageChange = async (newStage) => {
     try {
       const res = await api.put(`/deals/${id}`, { stage: newStage })
-      setDeal(res.data)
+      setDeal(prev => ({ ...prev, ...res.data }))
       setEditForm(prev => ({ ...prev, stage: newStage }))
       toast.success(`Stage updated to ${STAGES[newStage].label}`)
       window.dispatchEvent(new Event('notification:refresh'))
@@ -217,7 +290,6 @@ export default function DealDetail() {
             {/* Deal info / edit form */}
             {!editing ? (
               <div className="space-y-3">
-                {/* Contact — clickable if linked */}
                 {deal?.contact_name && (
                   <div className="flex items-center gap-3 text-sm">
                     <User className="w-4 h-4 text-gray-500 flex-shrink-0" />
@@ -305,6 +377,57 @@ export default function DealDetail() {
                     Save
                   </motion.button>
                 </div>
+              </div>
+            )}
+          </div>
+
+          {/* AI Deal Score card — Feature #50 */}
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-white text-sm font-medium flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-violet-400" />
+                AI Deal Score
+              </p>
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={handleScoreDeal}
+                disabled={scoring}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-violet-900/60 hover:bg-violet-800/80 disabled:opacity-50 text-violet-300 rounded-lg text-xs transition-colors border border-violet-700/50"
+              >
+                {scoring
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : deal?.ai_score !== null && deal?.ai_score !== undefined
+                  ? <RefreshCw className="w-3.5 h-3.5" />
+                  : <Sparkles className="w-3.5 h-3.5" />}
+                {scoring ? 'Scoring...' : deal?.ai_score !== null && deal?.ai_score !== undefined ? 'Rescore' : 'Score Deal'}
+              </motion.button>
+            </div>
+
+            {deal?.ai_score === null || deal?.ai_score === undefined ? (
+              <p className="text-gray-500 text-sm text-center py-6">
+                Not scored yet — click "Score Deal" for an AI win-likelihood estimate.
+              </p>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-center gap-4">
+                  <ScoreGauge score={deal.ai_score} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-gray-300 text-xs leading-relaxed">{deal.ai_score_reasoning}</p>
+                    {deal.ai_scored_at && (
+                      <p className="text-gray-600 text-[10px] mt-2">
+                        Last scored <TimeAgo dateString={deal.ai_scored_at} />
+                      </p>
+                    )}
+                  </div>
+                </div>
+                {deal.ai_score_factors?.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {deal.ai_score_factors.map((f, i) => (
+                      <FactorChip key={i} factor={f} />
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
