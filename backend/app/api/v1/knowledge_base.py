@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.core.database import get_db
-from app.core.deps import get_current_user
+from app.core.deps import require_admin
 from app.models.user import User
 from app.schemas.knowledge_base import (
     KnowledgeBaseEntryCreate, KnowledgeBaseEntryUpdate, KnowledgeBaseEntryResponse
@@ -17,7 +17,7 @@ router = APIRouter()
 @router.get("/", response_model=List[KnowledgeBaseEntryResponse])
 def list_entries(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     return get_entries(db, current_user.id)
 
@@ -26,7 +26,7 @@ def list_entries(
 def add_entry(
     data: KnowledgeBaseEntryCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     return create_entry(db, data, current_user.id)
 
@@ -35,7 +35,7 @@ def add_entry(
 def get_one_entry(
     entry_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     entry = get_entry(db, entry_id, current_user.id)
     if not entry:
@@ -48,7 +48,7 @@ def edit_entry(
     entry_id: str,
     data: KnowledgeBaseEntryUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     entry = update_entry(db, entry_id, data, current_user.id)
     if not entry:
@@ -60,7 +60,7 @@ def edit_entry(
 def remove_entry(
     entry_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     success = delete_entry(db, entry_id, current_user.id)
     if not success:

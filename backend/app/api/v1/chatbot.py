@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from app.core.database import get_db
-from app.core.deps import get_current_user
+from app.core.deps import require_admin
 from app.models.user import User
 from app.schemas.chatbot import ChatbotConfigResponse, ChatbotConfigUpdate
 from app.services.chatbot_service import get_or_create_chatbot_config
@@ -12,11 +12,12 @@ router = APIRouter()
 @router.get("/config", response_model=ChatbotConfigResponse)
 def get_chatbot_config(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     """
     Returns this user's chatbot configuration, auto-creating a default
     row (bot enabled, default prompt/fallback) if one doesn't exist yet.
+    Admin-only: bot settings can affect every live customer conversation.
     """
     return get_or_create_chatbot_config(db, current_user.id)
 
@@ -25,12 +26,11 @@ def get_chatbot_config(
 def update_chatbot_config(
     data: ChatbotConfigUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     """
     Updates any subset of: enabled, system_prompt, fallback_message.
-    This is the on/off switch and prompt editor the client needs —
-    no code changes required to turn the bot off or change its tone.
+    Admin-only — see get_chatbot_config note above.
     """
     config = get_or_create_chatbot_config(db, current_user.id)
 

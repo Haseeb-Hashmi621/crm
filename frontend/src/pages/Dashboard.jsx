@@ -1,6 +1,4 @@
 // frontend/src/pages/Dashboard.jsx  — REPLACE ENTIRE FILE
-// Adds Analytics nav item (between Revenue and Campaigns) + keeps existing
-// role-aware Admin item from the previous session.
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import {
@@ -34,10 +32,10 @@ const baseNavItems = [
   { label: 'Invoices',      icon: Receipt,       path: '/dashboard/invoices' },
   { label: 'Forms',         icon: FileText,      path: '/dashboard/forms' },
   { label: 'Calendar',      icon: CalendarDays,  path: '/dashboard/calendar' },
-  { label: 'Chatbot',       icon: Bot,           path: '/dashboard/chatbot' },
 ]
 
 const adminNavItem = { label: 'Admin', icon: Shield, path: '/dashboard/admin' }
+const chatbotNavItem = { label: 'Chatbot', icon: Bot, path: '/dashboard/chatbot' }
 
 export default function Dashboard() {
   const { logout } = useAuthStore()
@@ -50,7 +48,7 @@ export default function Dashboard() {
   }, [])
 
   const navItems = userRole === 'admin'
-    ? [...baseNavItems, adminNavItem]
+    ? [...baseNavItems, chatbotNavItem, adminNavItem]
     : baseNavItems
 
   const handleLogout = () => {
@@ -91,7 +89,7 @@ export default function Dashboard() {
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
                 isActive(item.path)
                   ? 'bg-violet-600 text-white'
-                  : item.label === 'Admin'
+                  : (item.label === 'Admin' || item.label === 'Chatbot')
                   ? 'text-violet-400 hover:text-white hover:bg-gray-800'
                   : 'text-gray-400 hover:text-white hover:bg-gray-800'
               }`}
