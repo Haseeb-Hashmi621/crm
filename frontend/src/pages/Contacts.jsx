@@ -235,7 +235,7 @@ export default function Contacts() {
     setExporting(true)
     try {
       const token = localStorage.getItem('token')
-      const res = await fetch('http://127.0.0.1:8000/contacts/export', {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'}/contacts/export`,  {
         headers: { Authorization: `Bearer ${token}` }
       })
       if (!res.ok) throw new Error('Export failed')

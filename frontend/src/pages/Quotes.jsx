@@ -474,7 +474,7 @@ function QuoteDetailModal({ quote, onClose, onStatusChange, onEdit }) {
 
   const handleDownload = () => {
     const token = localStorage.getItem('token')
-    const url = `http://127.0.0.1:8000/quotes/${quote.id}/pdf`
+    const url = `${import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'}/quotes/${quote.id}/pdf`
     fetch(url, { headers: { Authorization: `Bearer ${token}` } })
       .then(res => res.blob())
       .then(blob => {

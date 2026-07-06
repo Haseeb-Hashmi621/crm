@@ -800,7 +800,7 @@ export default function Invoices() {
     try {
       toast('Generating PDF...', { icon: '📄' })
       const token = localStorage.getItem('token')
-      const res = await fetch(`http://127.0.0.1:8000/invoices/${invoice.id}/pdf`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'}/invoices/${invoice.id}/pdf`, {
         headers: { Authorization: `Bearer ${token}` }
       })
       if (!res.ok) throw new Error('PDF generation failed')

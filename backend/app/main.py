@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.core.config import settings
 from app.api.v1.auth import router as auth_router
 from app.api.v1.contacts import router as contacts_router
 from app.api.v1.deals import router as deals_router
@@ -33,9 +34,16 @@ app = FastAPI(
     version="0.1.0"
 )
 
+allowed_origins = [settings.FRONTEND_URL]
+if settings.ENVIRONMENT != "production":
+    allowed_origins += [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -66,11 +74,12 @@ app.include_router(invoices_router, prefix="/invoices", tags=["Invoices"])
 app.include_router(forms_router, prefix="/forms", tags=["Forms"])
 app.include_router(calendar_router, prefix="/calendar", tags=["Calendar"])
 app.include_router(chatbot_router, prefix="/chatbot", tags=["Chatbot"])
-app.include_router(knowledge_base_router, prefix="/knowledge-base", tags=["Knowledge Base"])    
+app.include_router(knowledge_base_router, prefix="/knowledge-base", tags=["Knowledge Base"])
 
 @app.get("/")
 def root():
     return {"message": "CRM API is running!"}
+
 
 @app.get("/health")
 def health():
