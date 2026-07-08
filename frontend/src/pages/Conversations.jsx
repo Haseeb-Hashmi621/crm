@@ -19,6 +19,22 @@ const CHANNEL_CONFIG = {
   whatsapp: { icon: MessageCircle, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', label: 'WhatsApp' },
 }
 
+const SENTIMENT_CONFIG = {
+  positive: { label: 'Positive', color: 'text-green-400', bg: 'bg-green-500/10', border: 'border-green-500/30' },
+  neutral:  { label: 'Neutral',  color: 'text-gray-400',  bg: 'bg-gray-500/10',  border: 'border-gray-500/30' },
+  negative: { label: 'Negative', color: 'text-red-400',   bg: 'bg-red-500/10',   border: 'border-red-500/30' },
+}
+
+function SentimentBadge({ sentiment }) {
+  if (!sentiment) return null
+  const cfg = SENTIMENT_CONFIG[sentiment] || SENTIMENT_CONFIG.neutral
+  return (
+    <span className={`text-[9px] px-1.5 py-0.5 rounded-full border ${cfg.bg} ${cfg.color} ${cfg.border} font-medium`}>
+      {cfg.label}
+    </span>
+  )
+}
+
 const SEND_CHANNELS = ['note', 'call', 'meeting', 'email', 'sms', 'whatsapp']
 
 function TimeAgo({ dateString }) {
@@ -712,6 +728,7 @@ export default function Conversations() {
                             <span className={`text-[10px] font-semibold uppercase tracking-wide ${config.color}`}>
                               {isInbound ? `↙ ${config.label}` : config.label}
                             </span>
+                            {isInbound && <SentimentBadge sentiment={msg.sentiment} />}
                             {!isInbound && <ChannelBadge type={msg.type} />}
                             <span className="text-gray-600 text-[10px]">
                               <TimeAgo dateString={msg.created_at} />
