@@ -9,6 +9,7 @@ class InvoiceLineItemCreate(BaseModel):
     quantity: float = 1.0
     unit_price: float = 0.0
     discount_pct: float = 0.0
+    vat_applicable: bool = True
     product_id: Optional[UUID] = None
     sort_order: int = 0
 
@@ -21,6 +22,7 @@ class InvoiceLineItemResponse(BaseModel):
     quantity: float
     unit_price: float
     discount_pct: float
+    vat_applicable: bool = True
     total: float
     sort_order: int
 

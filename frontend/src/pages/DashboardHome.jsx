@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Users, TrendingUp, DollarSign, Activity, MessageSquare, PhoneCall, Send, Calendar, Phone, MessageCircle, CheckSquare, AlertCircle, Clock, Package, FileText, Receipt } from 'lucide-react'
+import { Users, TrendingUp, DollarSign, Activity, MessageSquare, PhoneCall, Send, Calendar, Phone, MessageCircle, CheckSquare, AlertCircle, Clock, Package, FileText, Receipt, Frown } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import api from '../services/api'
 
@@ -116,6 +116,96 @@ function TaskSummaryWidget() {
               <span className="text-yellow-400 text-[10px] font-medium flex-shrink-0">Today</span>
             </div>
           ))}
+        </div>
+      )}
+    </motion.div>
+  )
+}
+
+// ── At-Risk Contacts Widget — Feature #51 (Sentiment Analysis) ───────────────
+
+function AtRiskContactsWidget() {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    const fetch = async () => {
+      try {
+        const res = await api.get('/activities/at-risk-contacts?limit=5&days=30')
+        setData(res.data)
+      } catch (err) {
+        console.error(err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetch()
+  }, [])
+
+  if (loading || !data) return null
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.4 }}
+      className="bg-gray-900 rounded-2xl p-6 border border-gray-800 mt-6"
+    >
+      <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center gap-2">
+          <Frown className="w-5 h-5 text-red-400" />
+          <h2 className="text-white font-semibold">At-Risk Contacts</h2>
+        </div>
+        {data.total_negative_activities > 0 && (
+          <span className="text-xs bg-red-500/10 text-red-400 border border-red-500/30 px-2 py-0.5 rounded-full font-medium">
+            {data.total_negative_activities} negative signals · 30d
+          </span>
+        )}
+      </div>
+      <p className="text-gray-500 text-xs mb-4">Contacts whose recent messages read as frustrated or negative</p>
+
+      {data.contacts.length === 0 ? (
+        <p className="text-gray-600 text-sm text-center py-6">No negative sentiment detected recently — all good!</p>
+      ) : (
+        <div className="space-y-2">
+          <AnimatePresence>
+            {data.contacts.map((c, i) => (
+              <motion.div
+                key={c.contact_id}
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.05 }}
+                onClick={() => navigate(`/dashboard/contacts/${c.contact_id}`)}
+                className="flex items-start gap-3 p-3 bg-red-500/5 border border-red-500/20 rounded-xl cursor-pointer hover:bg-red-500/10 transition-colors"
+              >
+                <div className="w-8 h-8 bg-red-600/20 border border-red-500/30 rounded-full flex items-center justify-center text-red-300 text-xs font-bold flex-shrink-0 mt-0.5">
+                  {c.first_name?.[0]}{c.last_name?.[0] || ''}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-white text-sm font-medium truncate">
+                      {c.first_name} {c.last_name}
+                    </p>
+                    <span className="text-red-400 text-[10px] font-semibold flex-shrink-0">
+                      {c.negative_count} negative
+                    </span>
+                  </div>
+                  {c.company && <p className="text-gray-500 text-xs">{c.company}</p>}
+                  {c.most_recent_negative_content && (
+                    <p className="text-gray-400 text-xs mt-1 italic truncate">
+                      "{c.most_recent_negative_content}"
+                    </p>
+                  )}
+                  {c.most_recent_negative_at && (
+                    <p className="text-gray-600 text-[10px] mt-1">
+                      <TimeAgo dateString={c.most_recent_negative_at} />
+                    </p>
+                  )}
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
         </div>
       )}
     </motion.div>
@@ -328,6 +418,11 @@ export default function DashboardHome() {
                               </span>
                             </>
                           )}
+                          {activity.sentiment === 'negative' && (
+                            <span className="text-[10px] px-1.5 py-0.5 bg-red-500/10 text-red-400 border border-red-500/30 rounded-full">
+                              negative
+                            </span>
+                          )}
                           <span className="text-gray-600 text-xs ml-auto">
                             <TimeAgo dateString={activity.created_at} />
                           </span>
@@ -344,6 +439,9 @@ export default function DashboardHome() {
 
         {/* Task Summary Widget */}
         <TaskSummaryWidget />
+
+        {/* At-Risk Contacts Widget — Feature #51 */}
+        <AtRiskContactsWidget />
 
       </motion.div>
     </div>

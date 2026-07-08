@@ -5,10 +5,16 @@ from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
 from app.models.activity import Activity
-from app.schemas.activity import ActivityCreate, ActivityResponse, ActivityWithContact
+from app.schemas.activity import (
+    ActivityCreate, ActivityResponse, ActivityWithContact,
+    SentimentAnalysisResponse, AtRiskContactsResponse
+)
 from app.services.activity_service import (
     get_activities_by_contact, get_activities_by_deal,
     create_activity, delete_activity, get_recent_activities
+)
+from app.services.sentiment_service import (
+    analyze_and_store_activity_sentiment, get_at_risk_contacts
 )
 from typing import List
 
@@ -22,6 +28,39 @@ def get_activities_count(
     """Returns the exact total count of all activities — no cap, no pagination."""
     total = db.query(func.count(Activity.id)).scalar()
     return {"total": total}
+
+# ── Sentiment Analysis (Feature #51) — must come before /{contact_id} ────────
+
+@router.get("/at-risk-contacts", response_model=AtRiskContactsResponse)
+def list_at_risk_contacts(
+    limit: int = Query(default=10, ge=1, le=50),
+    days: int = Query(default=30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Returns contacts with the most negative-sentiment activity in the last
+    `days` days, for the "at-risk contacts" dashboard widget.
+    """
+    result = get_at_risk_contacts(db, current_user.id, limit=limit, days=days)
+    return AtRiskContactsResponse(**result)
+
+@router.post("/{activity_id}/analyze-sentiment", response_model=SentimentAnalysisResponse)
+def analyze_activity_sentiment(
+    activity_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Manually (re)runs sentiment analysis on any single activity — useful for
+    call/meeting/note entries typed by an agent, not just inbound messages
+    which are analyzed automatically by the webhook.
+    """
+    activity = db.query(Activity).filter(Activity.id == activity_id).first()
+    if not activity:
+        raise HTTPException(status_code=404, detail="Activity not found")
+    result = analyze_and_store_activity_sentiment(db, activity)
+    return SentimentAnalysisResponse(**result)
 
 @router.get("/contact/{contact_id}", response_model=List[ActivityResponse])
 def list_contact_activities(

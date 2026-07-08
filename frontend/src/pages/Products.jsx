@@ -17,14 +17,13 @@ const UNIT_OPTIONS = [
   'kg', 'g', 'lb', 'oz', 'l', 'ml', 'piece', 'set', 'license',
 ]
 
-const CURRENCY_OPTIONS = ['USD', 'EUR', 'GBP', 'PKR', 'AED', 'SAR', 'INR', 'CAD', 'AUD']
+const CURRENCY_OPTIONS = ['BHD', 'USD', 'EUR']
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function formatPrice(price, currency = 'USD') {
   if (currency === 'USD') return `$${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   if (currency === 'EUR') return `€${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-  if (currency === 'GBP') return `£${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   return `${currency} ${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
@@ -65,7 +64,7 @@ function ProductModal({ product, categories, onSave, onClose }) {
     unit: product?.unit || 'unit',
     price: product?.price ?? '',
     cost: product?.cost ?? '',
-    currency: product?.currency || 'USD',
+    currency: product?.currency || 'BHD',
     is_active: product?.is_active ?? true,
     stock_qty: product?.stock_qty ?? '',
   })

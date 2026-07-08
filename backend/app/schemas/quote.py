@@ -13,6 +13,7 @@ class LineItemCreate(BaseModel):
     description: Optional[str] = None
     quantity: float = 1.0
     unit_price: float = 0.0
+    vat_applicable: bool = True
 
 
 class LineItemResponse(BaseModel):
@@ -22,6 +23,7 @@ class LineItemResponse(BaseModel):
     description: Optional[str] = None
     quantity: float
     unit_price: float
+    vat_applicable: bool = True
     sort_order: int
 
     class Config:

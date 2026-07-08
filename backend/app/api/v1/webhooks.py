@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models.contact import Contact
 from app.models.activity import Activity
-from app.services import chatbot_service, conversation_service
+from app.services import chatbot_service, conversation_service, sentiment_service
 
 router = APIRouter()
 
@@ -50,6 +50,18 @@ def _find_contact_by_phone(db: Session, raw_phone: str):
     return None
 
 
+def _try_analyze_sentiment(db: Session, activity: Activity) -> None:
+    """
+    Best-effort sentiment analysis for an inbound activity. Never raises —
+    a sentiment analysis failure must never break the inbound message
+    pipeline or the response sent back to Twilio.
+    """
+    try:
+        sentiment_service.analyze_and_store_activity_sentiment(db, activity)
+    except Exception:
+        db.rollback()
+
+
 @router.post("/twilio/sms")
 async def twilio_sms_inbound(request: Request, db: Session = Depends(get_db)):
     form = await request.form()
@@ -69,6 +81,10 @@ async def twilio_sms_inbound(request: Request, db: Session = Depends(get_db)):
         )
         db.add(activity)
         db.commit()
+        db.refresh(activity)
+
+        # ── Sentiment analysis (Feature #51) ────────────────────────────────
+        _try_analyze_sentiment(db, activity)
 
     return Response(content="<Response/>", media_type="text/xml")
 
@@ -92,6 +108,10 @@ async def twilio_whatsapp_inbound(request: Request, db: Session = Depends(get_db
         )
         db.add(inbound_activity)
         db.commit()
+        db.refresh(inbound_activity)
+
+        # ── Sentiment analysis (Feature #51) ────────────────────────────────
+        _try_analyze_sentiment(db, inbound_activity)
 
         # ── Chatbot auto-reply ──────────────────────────────────────────────
         # Only fires if both the user's global bot switch AND this contact's

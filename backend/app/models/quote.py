@@ -2,7 +2,7 @@
 backend/app/models/quote.py  — NEW FILE
 """
 import uuid
-from sqlalchemy import Column, String, Text, Float, Integer, DateTime, ForeignKey
+from sqlalchemy import Column, String, Text, Float, Integer, Boolean, DateTime, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -59,6 +59,7 @@ class QuoteLineItem(Base):
     description = Column(Text, nullable=True)
     quantity = Column(Float, nullable=False, default=1.0)
     unit_price = Column(Float, nullable=False, default=0.0)
+    vat_applicable = Column(Boolean, nullable=False, default=True)
     sort_order = Column(Integer, nullable=False, default=0)
 
     quote = relationship("Quote", back_populates="line_items")

@@ -41,12 +41,12 @@ const STATUS_CONFIG = {
   },
 }
 
-const CURRENCIES = ['USD', 'EUR', 'GBP', 'PKR', 'AED', 'SAR', 'INR', 'CAD', 'AUD']
+const CURRENCIES = ['BHD', 'USD', 'EUR']
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmt(amount, currency = 'USD') {
-  const sym = { USD: '$', EUR: '€', GBP: '£', PKR: 'PKR ', AED: 'AED ' }[currency] || `${currency} `
+  const sym = { BHD: 'BHD ', USD: '$', EUR: '€' }[currency] || `${currency} `
   return `${sym}${Number(amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
@@ -56,11 +56,13 @@ function calcLineTotal(qty, unitPrice, discountPct) {
 }
 
 function calcTotals(lines, discountPct, taxPct) {
+  // VAT applies only to line items with the VAT checkbox on
   const subtotal = lines.reduce((s, l) => s + calcLineTotal(l.quantity, l.unit_price, l.discount_pct), 0)
+  const vatableSubtotal = lines.reduce((s, l) => s + (l.vat_applicable !== false ? calcLineTotal(l.quantity, l.unit_price, l.discount_pct) : 0), 0)
   const discountAmount = Math.round(subtotal * discountPct / 100 * 100) / 100
-  const taxable = subtotal - discountAmount
+  const taxable = vatableSubtotal * (1 - discountPct / 100)
   const taxAmount = Math.round(taxable * taxPct / 100 * 100) / 100
-  const total = Math.round((taxable + taxAmount) * 100) / 100
+  const total = Math.round((subtotal - discountAmount + taxAmount) * 100) / 100
   return { subtotal, discountAmount, taxAmount, total }
 }
 
@@ -89,7 +91,7 @@ function LineItemRow({ item, index, products, onChange, onRemove }) {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
       className="grid gap-2 items-center"
-      style={{ gridTemplateColumns: '1fr 80px 100px 80px 100px 32px' }}
+      style={{ gridTemplateColumns: '1fr 70px 95px 70px 44px 100px 32px' }}
     >
       {/* Description / Product picker */}
       <div ref={ref} className="relative">
@@ -109,11 +111,10 @@ function LineItemRow({ item, index, products, onChange, onRemove }) {
               initial={{ opacity: 0, y: -4 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -4 }}
-              className="absolute left-0 right-0 top-full mt-1 bg-gray-800 border border-gray-700 rounded-xl shadow-2xl z-50 overflow-hidden max-h-36 overflow-y-auto"
+              className="absolute left-0 right-0 top-full mt-1 bg-gray-800 border border-gray-700 rounded-xl shadow-2xl z-50 overflow-hidden max-h-72 overflow-y-auto"
             >
               {products
                 .filter(p => p.name.toLowerCase().includes(item.description.toLowerCase()) && p.is_active)
-                .slice(0, 5)
                 .map(p => (
                   <button
                     key={p.id}
@@ -172,6 +173,16 @@ function LineItemRow({ item, index, products, onChange, onRemove }) {
         />
       </div>
 
+      {/* VAT applicable */}
+      <div className="flex justify-end pr-1" title="Charge VAT on this item">
+        <input
+          type="checkbox"
+          checked={item.vat_applicable !== false}
+          onChange={e => onChange(index, { ...item, vat_applicable: e.target.checked })}
+          className="accent-violet-500 w-3.5 h-3.5 cursor-pointer"
+        />
+      </div>
+
       {/* Total */}
       <div className="text-white text-xs text-right font-medium px-1">
         {fmt(total)}
@@ -199,7 +210,7 @@ function InvoiceModal({ invoice, contacts, products, onSave, onClose }) {
     client_email: invoice?.client_email || '',
     client_company: invoice?.client_company || '',
     client_address: invoice?.client_address || '',
-    currency: invoice?.currency || 'USD',
+    currency: invoice?.currency || 'BHD',
     discount_pct: invoice?.discount_pct ?? 0,
     tax_pct: invoice?.tax_pct ?? 0,
     due_date: invoice?.due_date ? invoice.due_date.slice(0, 10) : '',
@@ -211,10 +222,11 @@ function InvoiceModal({ invoice, contacts, products, onSave, onClose }) {
           quantity: li.quantity,
           unit_price: li.unit_price,
           discount_pct: li.discount_pct,
+          vat_applicable: li.vat_applicable ?? true,
           product_id: li.product_id || null,
           sort_order: li.sort_order,
         }))
-      : [{ description: '', quantity: 1, unit_price: 0, discount_pct: 0, product_id: null, sort_order: 0 }],
+      : [{ description: '', quantity: 1, unit_price: 0, discount_pct: 0, vat_applicable: true, product_id: null, sort_order: 0 }],
   })
 
   const [saving, setSaving] = useState(false)
@@ -252,8 +264,8 @@ function InvoiceModal({ invoice, contacts, products, onSave, onClose }) {
     setForm(prev => ({
       ...prev,
       line_items: [...prev.line_items, {
-        description: '', quantity: 1, unit_price: 0,
-        discount_pct: 0, product_id: null, sort_order: prev.line_items.length
+        description: '', quantity: 1, unit_price: 0, discount_pct: 0,
+        vat_applicable: true, product_id: null, sort_order: prev.line_items.length
       }]
     }))
   }
@@ -442,8 +454,8 @@ function InvoiceModal({ invoice, contacts, products, onSave, onClose }) {
 
             {/* Column headers */}
             <div className="grid gap-2 mb-2 px-0.5"
-              style={{ gridTemplateColumns: '1fr 80px 100px 80px 100px 32px' }}>
-              {['Description', 'Qty', 'Unit Price', 'Disc %', 'Total', ''].map((h, i) => (
+              style={{ gridTemplateColumns: '1fr 70px 95px 70px 44px 100px 32px' }}>
+              {['Description', 'Qty', 'Unit Price', 'Disc %', 'VAT', 'Total', ''].map((h, i) => (
                 <span key={i} className={`text-[10px] font-semibold text-gray-500 uppercase tracking-wide ${i >= 1 ? 'text-right' : ''} ${i === 5 ? 'text-center' : ''}`}>
                   {h}
                 </span>

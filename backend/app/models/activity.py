@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, ForeignKey, Text, Boolean
+from sqlalchemy import Column, String, DateTime, ForeignKey, Text, Boolean, Float
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -19,5 +19,10 @@ class Activity(Base):
     # False = sent by a human agent
     # NULL  = pre-existing rows / inbound messages / unknown
     is_bot = Column(Boolean, nullable=True, default=False)
+
+    # AI Sentiment Analysis (Feature #51)
+    sentiment = Column(String(20), nullable=True)          # positive | neutral | negative
+    sentiment_score = Column(Float, nullable=True)          # -1.0 to 1.0
+    sentiment_analyzed_at = Column(DateTime(timezone=True), nullable=True)
 
     contact = relationship("Contact", lazy="select")

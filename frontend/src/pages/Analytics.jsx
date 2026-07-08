@@ -3,11 +3,13 @@ import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import {
   BarChart3, TrendingDown, Clock, Award, Loader2,
-  ArrowDown, Users, DollarSign, Target, AlertCircle
+  ArrowDown, Users, DollarSign, Target, AlertCircle,
+  Sparkles, TrendingUp, ShieldQuestion, ShieldCheck, ShieldAlert
 } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, Cell, FunnelChart, Funnel, LabelList
+  ResponsiveContainer, Cell, FunnelChart, Funnel, LabelList,
+  LineChart, Line
 } from 'recharts'
 import api from '../services/api'
 
@@ -42,6 +44,18 @@ function CustomVelocityTooltip({ active, payload, label }) {
         <p className="text-white text-sm font-medium">{label}</p>
         <p className="text-violet-400 text-sm">{payload[0].value} days avg</p>
         <p className="text-gray-500 text-xs">{payload[0].payload.deal_count} deals measured</p>
+      </div>
+    )
+  }
+  return null
+}
+
+function CustomForecastTooltip({ active, payload, label }) {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-gray-800 border border-gray-700 rounded-xl p-3">
+        <p className="text-white text-sm font-medium">{label}</p>
+        <p className="text-violet-400 text-sm">${payload[0].value.toLocaleString()}</p>
       </div>
     )
   }
@@ -279,13 +293,162 @@ function OwnerSection({ data, loading }) {
   )
 }
 
+// ── Revenue Forecast section — Feature #52 ────────────────────────────────────
+
+const CONFIDENCE_CONFIG = {
+  low:    { label: 'Low Confidence',    icon: ShieldQuestion, color: 'text-yellow-400', bg: 'bg-yellow-500/10', border: 'border-yellow-500/30' },
+  medium: { label: 'Medium Confidence', icon: ShieldAlert,    color: 'text-blue-400',   bg: 'bg-blue-500/10',   border: 'border-blue-500/30' },
+  high:   { label: 'High Confidence',   icon: ShieldCheck,    color: 'text-green-400',  bg: 'bg-green-500/10',  border: 'border-green-500/30' },
+}
+
+function ForecastSection({ data, loading }) {
+  if (loading) {
+    return (
+      <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800 flex items-center justify-center h-80">
+        <Loader2 className="w-8 h-8 text-violet-500 animate-spin" />
+      </div>
+    )
+  }
+
+  if (!data) {
+    return (
+      <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800 text-center py-16">
+        <Sparkles className="w-12 h-12 mx-auto mb-3 text-gray-700" />
+        <p className="text-gray-500">Forecast unavailable right now</p>
+      </div>
+    )
+  }
+
+  const barData = [
+    { label: 'Next 30 Days', value: data.forecast_30_day },
+    { label: 'Next 60 Days', value: data.forecast_60_day },
+    { label: 'Next 90 Days', value: data.forecast_90_day },
+  ]
+
+  const trendData = (data.historical_monthly_won || []).map(m => ({
+    month: m.month,
+    won_value: m.won_value,
+  }))
+
+  const confidenceCfg = CONFIDENCE_CONFIG[data.confidence] || CONFIDENCE_CONFIG.medium
+  const ConfidenceIcon = confidenceCfg.icon
+
+  return (
+    <div className="bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden">
+      <div className="px-6 py-5 border-b border-gray-800 flex items-start justify-between flex-wrap gap-3">
+        <div>
+          <h2 className="text-white font-semibold flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-violet-400" />
+            AI Revenue Forecast
+          </h2>
+          <p className="text-gray-500 text-xs mt-1">
+            Weighted pipeline projections based on deal scores, historical conversion rates, and stage velocity
+          </p>
+        </div>
+        <span className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border ${confidenceCfg.bg} ${confidenceCfg.color} ${confidenceCfg.border}`}>
+          <ConfidenceIcon className="w-3.5 h-3.5" />
+          {confidenceCfg.label}
+        </span>
+      </div>
+
+      <div className="p-6">
+        {/* Stat row */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          {[
+            { label: 'Open Deals', value: data.open_deal_count, icon: Target, color: 'bg-blue-500' },
+            { label: 'Pipeline Value', value: `$${data.total_pipeline_value.toLocaleString()}`, icon: DollarSign, color: 'bg-gray-600' },
+            { label: 'Probability-Weighted', value: `$${data.pipeline_weighted_value.toLocaleString()}`, icon: TrendingUp, color: 'bg-violet-500' },
+            { label: '30-Day Forecast', value: `$${data.forecast_30_day.toLocaleString()}`, icon: Sparkles, color: 'bg-green-500' },
+          ].map((stat, i) => (
+            <motion.div
+              key={stat.label}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.06 }}
+              className="bg-gray-800/60 rounded-xl p-4 border border-gray-800"
+            >
+              <div className={`w-8 h-8 ${stat.color} rounded-lg flex items-center justify-center mb-2`}>
+                <stat.icon className="w-4 h-4 text-white" />
+              </div>
+              <p className="text-gray-400 text-xs">{stat.label}</p>
+              <p className="text-white text-lg font-bold mt-0.5">{stat.value}</p>
+            </motion.div>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          {/* Forecast bar chart */}
+          <div>
+            <p className="text-white text-sm font-medium mb-3">Projected Revenue by Window</p>
+            {data.forecast_30_day === 0 && data.forecast_60_day === 0 && data.forecast_90_day === 0 ? (
+              <div className="flex items-center justify-center h-48 text-gray-500 text-sm">
+                No forecasted revenue from current open pipeline
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={barData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" />
+                  <XAxis dataKey="label" tick={{ fill: '#6B7280', fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fill: '#6B7280', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => `$${v.toLocaleString()}`} />
+                  <Tooltip content={<CustomForecastTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
+                  <Bar dataKey="value" radius={[6, 6, 0, 0]} fill="#8B5CF6" />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+
+          {/* Historical trend line */}
+          <div>
+            <p className="text-white text-sm font-medium mb-3">Historical Monthly Won Revenue</p>
+            {trendData.length === 0 ? (
+              <div className="flex items-center justify-center h-48 text-gray-500 text-sm text-center px-4">
+                Not enough closed-won history yet to show a trend
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={220}>
+                <LineChart data={trendData} margin={{ top: 0, right: 12, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" />
+                  <XAxis dataKey="month" tick={{ fill: '#6B7280', fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fill: '#6B7280', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => `$${v.toLocaleString()}`} />
+                  <Tooltip content={<CustomForecastTooltip />} />
+                  <Line type="monotone" dataKey="won_value" stroke="#22C55E" strokeWidth={2} dot={{ fill: '#22C55E', r: 3 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
+
+        {/* AI Narrative */}
+        <div className="bg-violet-500/5 border border-violet-500/20 rounded-xl p-4">
+          <p className="text-gray-300 text-sm leading-relaxed">{data.narrative}</p>
+          {data.assumptions?.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-violet-500/10">
+              <p className="text-gray-500 text-xs font-medium mb-1.5">Methodology</p>
+              <ul className="space-y-1">
+                {data.assumptions.map((a, i) => (
+                  <li key={i} className="text-gray-500 text-xs flex items-start gap-1.5">
+                    <span className="text-violet-500 mt-0.5">•</span>
+                    <span>{a}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main page ───────────────────────────────────────────────────────────────────
 
 export default function Analytics() {
   const [funnel, setFunnel] = useState(null)
   const [velocity, setVelocity] = useState(null)
   const [owners, setOwners] = useState(null)
+  const [forecast, setForecast] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [loadingForecast, setLoadingForecast] = useState(true)
 
   useEffect(() => {
     const fetchAll = async () => {
@@ -305,6 +468,18 @@ export default function Analytics() {
       }
     }
     fetchAll()
+
+    const fetchForecast = async () => {
+      try {
+        const res = await api.get('/deals/analytics/forecast')
+        setForecast(res.data)
+      } catch (err) {
+        console.error(err)
+      } finally {
+        setLoadingForecast(false)
+      }
+    }
+    fetchForecast()
   }, [])
 
   return (
@@ -336,6 +511,11 @@ export default function Analytics() {
             ))}
           </div>
         )}
+
+        {/* AI Revenue Forecast — Feature #52 */}
+        <div className="mb-6">
+          <ForecastSection data={forecast} loading={loadingForecast} />
+        </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           <FunnelSection data={funnel} loading={loading} />

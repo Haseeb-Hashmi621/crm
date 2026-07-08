@@ -22,8 +22,8 @@ const STATUS_CONFIG = {
   expired:  { label: 'Expired',  icon: Clock,          color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/30' },
 }
 
-const CURRENCY_OPTIONS = ['USD', 'EUR', 'GBP', 'PKR', 'AED', 'SAR', 'INR', 'CAD', 'AUD']
-const CURRENCY_SYMBOLS = { USD: '$', EUR: '€', GBP: '£', PKR: 'Rs ', AED: 'AED ', SAR: 'SAR ', INR: '₹', CAD: 'C$', AUD: 'A$' }
+const CURRENCY_OPTIONS = ['BHD', 'USD', 'EUR']
+const CURRENCY_SYMBOLS = { BHD: 'BHD ', USD: '$', EUR: '€' }
 
 function fmtMoney(amount, currency = 'USD') {
   const symbol = CURRENCY_SYMBOLS[currency] || currency + ' '
@@ -56,7 +56,7 @@ function ProductPicker({ products, onSelect, onClose }) {
   const filtered = products.filter(p =>
     p.name.toLowerCase().includes(search.toLowerCase()) ||
     (p.sku || '').toLowerCase().includes(search.toLowerCase())
-  ).slice(0, 8)
+  )
 
   return (
     <motion.div
@@ -77,7 +77,7 @@ function ProductPicker({ products, onSelect, onClose }) {
           className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-violet-500 transition-colors"
         />
       </div>
-      <div className="max-h-56 overflow-y-auto">
+      <div className="max-h-72 overflow-y-auto">
         {filtered.length === 0 ? (
           <p className="text-gray-500 text-xs text-center py-4">
             {products.length === 0 ? 'No products in catalog yet' : 'No matches'}
@@ -116,7 +116,7 @@ function QuoteBuilderModal({ quote, contacts, deals, products, onSave, onClose }
     client_email: quote?.client_email || '',
     client_company: quote?.client_company || '',
     notes: quote?.notes || 'Payment due within 14 days. Prices valid for 30 days from issue date.',
-    currency: quote?.currency || 'USD',
+    currency: quote?.currency || 'BHD',
     discount_type: quote?.discount_type || 'percent',
     discount_value: quote?.discount_value ?? 0,
     tax_percent: quote?.tax_percent ?? 0,
@@ -124,8 +124,8 @@ function QuoteBuilderModal({ quote, contacts, deals, products, onSave, onClose }
   })
   const [lineItems, setLineItems] = useState(
     quote?.line_items?.length
-      ? quote.line_items.map(li => ({ ...li, _key: li.id }))
-      : [{ _key: 'new-0', name: '', description: '', quantity: 1, unit_price: 0, product_id: null }]
+      ? quote.line_items.map(li => ({ ...li, vat_applicable: li.vat_applicable ?? true, _key: li.id }))
+      : [{ _key: 'new-0', name: '', description: '', quantity: 1, unit_price: 0, vat_applicable: true, product_id: null }]
   )
   const [showProductPicker, setShowProductPicker] = useState(null) // index of row, or null
   const [showContactPicker, setShowContactPicker] = useState(false)
@@ -133,7 +133,7 @@ function QuoteBuilderModal({ quote, contacts, deals, products, onSave, onClose }
   const [saving, setSaving] = useState(false)
 
   const addLineItem = () => {
-    setLineItems(prev => [...prev, { _key: `new-${Date.now()}`, name: '', description: '', quantity: 1, unit_price: 0, product_id: null }])
+    setLineItems(prev => [...prev, { _key: `new-${Date.now()}`, name: '', description: '', quantity: 1, unit_price: 0, vat_applicable: true, product_id: null }])
   }
 
   const updateLineItem = (idx, patch) => {
@@ -171,14 +171,15 @@ function QuoteBuilderModal({ quote, contacts, deals, products, onSave, onClose }
     return `${c.first_name} ${c.last_name} ${c.email || ''}`.toLowerCase().includes(q)
   }).slice(0, 6)
 
-  // Live totals
+  // Live totals — VAT applies only to line items with the VAT checkbox on
   const subtotal = lineItems.reduce((s, li) => s + (parseFloat(li.quantity) || 0) * (parseFloat(li.unit_price) || 0), 0)
+  const vatableSubtotal = lineItems.reduce((s, li) => s + (li.vat_applicable !== false ? (parseFloat(li.quantity) || 0) * (parseFloat(li.unit_price) || 0) : 0), 0)
   const discountAmount = form.discount_type === 'percent'
     ? subtotal * (parseFloat(form.discount_value) || 0) / 100
     : Math.min(parseFloat(form.discount_value) || 0, subtotal)
-  const taxableBase = subtotal - discountAmount
-  const taxAmount = taxableBase * (parseFloat(form.tax_percent) || 0) / 100
-  const total = taxableBase + taxAmount
+  const discountRatio = subtotal > 0 ? discountAmount / subtotal : 0
+  const taxAmount = vatableSubtotal * (1 - discountRatio) * (parseFloat(form.tax_percent) || 0) / 100
+  const total = subtotal - discountAmount + taxAmount
 
   const handleSave = async (statusOverride) => {
     if (!form.title.trim()) { toast.error('Quote title is required'); return }
@@ -206,6 +207,7 @@ function QuoteBuilderModal({ quote, contacts, deals, products, onSave, onClose }
           description: li.description?.trim() || null,
           quantity: parseFloat(li.quantity) || 1,
           unit_price: parseFloat(li.unit_price) || 0,
+          vat_applicable: li.vat_applicable !== false,
         })),
       }
       if (statusOverride) payload.status = statusOverride
@@ -358,6 +360,12 @@ function QuoteBuilderModal({ quote, contacts, deals, products, onSave, onClose }
                             onChange={e => updateLineItem(idx, { unit_price: e.target.value })}
                             className="w-24 bg-gray-800 border border-gray-700 text-white rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-violet-500 transition-colors" />
                         </div>
+                        <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none" title="Charge VAT on this item">
+                          <input type="checkbox" checked={li.vat_applicable !== false}
+                            onChange={e => updateLineItem(idx, { vat_applicable: e.target.checked })}
+                            className="accent-violet-500 w-3.5 h-3.5" />
+                          VAT
+                        </label>
                         <span className="ml-auto text-violet-400 text-sm font-semibold">
                           {fmtMoney((parseFloat(li.quantity) || 0) * (parseFloat(li.unit_price) || 0), form.currency)}
                         </span>

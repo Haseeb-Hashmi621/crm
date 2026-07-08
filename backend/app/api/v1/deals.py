@@ -3,6 +3,7 @@ Adds three analytics endpoints:
   GET /deals/analytics/funnel     — stage counts/values + conversion %
   GET /deals/analytics/velocity   — avg days spent per stage
   GET /deals/analytics/by-owner   — performance grouped by owner
+  GET /deals/analytics/forecast   — AI-powered 30/60/90-day revenue forecast (Feature #52)
 
 Feature #50 — AI Deal Scoring:
   POST /deals/{deal_id}/score     — score a single deal
@@ -19,6 +20,7 @@ from app.models.deal_stage_history import DealStageHistory
 from app.schemas.deal import DealCreate, DealUpdate, DealResponse, DealScoreResponse, BulkScoreResponse
 from app.services.deal_service import get_deals, get_deal, create_deal, update_deal, delete_deal
 from app.services.ai_deal_scoring_service import score_deal, score_all_open_deals
+from app.services.forecast_service import generate_forecast
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime
@@ -77,6 +79,25 @@ class OwnerPerformance(BaseModel):
 
 class OwnerPerformanceResponse(BaseModel):
     owners: List[OwnerPerformance]
+
+
+class MonthlyWonRevenue(BaseModel):
+    month: str
+    won_value: float
+
+
+class RevenueForecastResponse(BaseModel):
+    generated_at: datetime
+    open_deal_count: int
+    total_pipeline_value: float
+    pipeline_weighted_value: float
+    forecast_30_day: float
+    forecast_60_day: float
+    forecast_90_day: float
+    historical_monthly_won: List[MonthlyWonRevenue]
+    confidence: str
+    narrative: str
+    assumptions: List[str]
 
 
 # ── Existing CRUD endpoints ────────────────────────────────────────────────────
@@ -249,6 +270,22 @@ def get_owner_analytics(
     owners.sort(key=lambda o: o.won_value, reverse=True)
 
     return OwnerPerformanceResponse(owners=owners)
+
+
+@router.get("/analytics/forecast", response_model=RevenueForecastResponse)
+def get_revenue_forecast(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Feature #52 — AI-Powered Revenue Forecasting.
+    Computes deterministic 30/60/90-day pipeline-weighted revenue projections
+    from current open deals (using AI Deal Scores where available, falling
+    back to historical stage-conversion rates), then asks Groq for a plain-
+    English narrative and confidence label on top of those computed numbers.
+    """
+    result = generate_forecast(db, current_user.id)
+    return RevenueForecastResponse(**result)
 
 
 # ── AI Deal Scoring — Feature #50 ──────────────────────────────────────────────

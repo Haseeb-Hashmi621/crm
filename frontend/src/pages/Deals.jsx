@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, X, Loader2, DollarSign, User } from 'lucide-react'
+import { Plus, X, Loader2, DollarSign, User, Sparkles } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import api from '../services/api'
 import toast from 'react-hot-toast'
@@ -13,6 +13,12 @@ const STAGES = [
   { id: 'won', label: 'Won', color: 'border-green-500', dot: 'bg-green-500' },
   { id: 'lost', label: 'Lost', color: 'border-red-500', dot: 'bg-red-500' },
 ]
+
+function scoreBadgeColor(score) {
+  if (score >= 70) return 'bg-green-500/15 text-green-400 border-green-500/40'
+  if (score >= 40) return 'bg-yellow-500/15 text-yellow-400 border-yellow-500/40'
+  return 'bg-red-500/15 text-red-400 border-red-500/40'
+}
 
 // ── Contact Picker ────────────────────────────────────────────────────────────
 
@@ -396,8 +402,19 @@ export default function Deals() {
                           onDragStart={() => setDragging(deal.id)}
                           onDragEnd={() => setDragging(null)}
                           onClick={() => navigate(`/dashboard/deals/${deal.id}`)}
-                          className="bg-gray-900 border border-gray-800 rounded-xl p-4 cursor-pointer hover:border-violet-500/50 transition-colors"
+                          className="relative bg-gray-900 border border-gray-800 rounded-xl p-4 cursor-pointer hover:border-violet-500/50 transition-colors"
                         >
+                          {/* AI Score badge — Feature #50 */}
+                          {deal.ai_score !== null && deal.ai_score !== undefined && (
+                            <div
+                              title={`AI win-likelihood score: ${deal.ai_score}`}
+                              className={`absolute -top-2 -right-2 flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[10px] font-bold ${scoreBadgeColor(deal.ai_score)}`}
+                            >
+                              <Sparkles className="w-2.5 h-2.5" />
+                              {deal.ai_score}
+                            </div>
+                          )}
+
                           <div className="flex items-center justify-between mb-2">
                             <p className="text-white text-sm font-medium truncate flex-1">{deal.title}</p>
                             <motion.button

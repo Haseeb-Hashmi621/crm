@@ -33,8 +33,16 @@ def _fmt_money(amount: float, currency: str) -> str:
 
 
 def compute_totals(quote: Quote) -> dict:
-    """Compute subtotal, discount, tax, and total from line items + quote settings."""
+    """Compute subtotal, discount, tax, and total from line items + quote settings.
+
+    VAT is applied ONLY to line items with vat_applicable=True, so pass-through
+    government fees can be excluded while services carry VAT."""
     subtotal = sum((item.quantity or 0) * (item.unit_price or 0) for item in quote.line_items)
+    vatable_subtotal = sum(
+        (item.quantity or 0) * (item.unit_price or 0)
+        for item in quote.line_items
+        if getattr(item, "vat_applicable", True)
+    )
 
     if quote.discount_type == "percent":
         discount_amount = subtotal * (quote.discount_value or 0) / 100
@@ -42,10 +50,12 @@ def compute_totals(quote: Quote) -> dict:
         discount_amount = quote.discount_value or 0
     discount_amount = min(discount_amount, subtotal)  # never negative-total
 
-    taxable_base = subtotal - discount_amount
+    # Prorate the discount across VAT-able items so tax is charged on their net value
+    discount_ratio = (discount_amount / subtotal) if subtotal > 0 else 0
+    taxable_base = vatable_subtotal * (1 - discount_ratio)
     tax_amount = taxable_base * (quote.tax_percent or 0) / 100
 
-    total = taxable_base + tax_amount
+    total = subtotal - discount_amount + tax_amount
 
     return {
         "subtotal": round(subtotal, 2),
@@ -145,6 +155,7 @@ def create_quote(db: Session, data: QuoteCreate, user_id: uuid.UUID) -> Quote:
             description=item.description,
             quantity=item.quantity,
             unit_price=item.unit_price,
+            vat_applicable=getattr(item, "vat_applicable", True),
             sort_order=i,
         ))
 
@@ -182,6 +193,7 @@ def update_quote(db: Session, quote_id: str, data: QuoteUpdate, user_id: uuid.UU
                 description=item.description,
                 quantity=item.quantity,
                 unit_price=item.unit_price,
+                vat_applicable=getattr(item, "vat_applicable", True),
                 sort_order=i,
             ))
 
@@ -199,126 +211,170 @@ def delete_quote(db: Session, quote_id: str, user_id: uuid.UUID) -> bool:
     return True
 
 
-# ── PDF generation ──────────────────────────────────────────────────────────────
+# ── PDF generation (official letterhead replica) ────────────────────────────
 
-def generate_quote_pdf(quote: Quote, sender_name: str, sender_email: str) -> bytes:
-    """Render a Quote to a professional PDF, returned as bytes."""
+def generate_quote_pdf(quote: Quote, sender_name: str = "", sender_email: str = "") -> bytes:
+    """Render a Quote as an exact replica of the official
+    BUSINESS HUB OF SPHERE CO W.L.L quotation (letterhead, boxed layout,
+    signature + stamp, terms & conditions)."""
+    from reportlab.pdfgen import canvas as rl_canvas
+    from app.services import pdf_branding as B
+
     totals = compute_totals(quote)
+    currency = (quote.currency or "BHD").upper()
+
     buffer = io.BytesIO()
+    c = rl_canvas.Canvas(buffer, pagesize=(B.PAGE_W, B.PAGE_H))
+    c.setTitle(f"Quotation {quote.quote_number}")
 
-    doc = SimpleDocTemplate(
-        buffer, pagesize=letter,
-        topMargin=0.6 * inch, bottomMargin=0.6 * inch,
-        leftMargin=0.7 * inch, rightMargin=0.7 * inch,
-    )
+    # ── fixed geometry (measured from the official document, in pt from top) ─
+    ROW_H = 10.5556
+    TBL_L, TBL_R = 28.8, 570.6
+    COLS = [28.8, 283.6, 379.8, 475.2, 570.6]        # Description | Qty | Price | Total
+    HDR_TOP, HDR_BOT = 217.0, 239.4                  # items header band
+    BODY_TOP, BODY_BOT = 239.4, 477.0                # items body band (page 1)
+    MAX_ROWS = int((BODY_BOT - BODY_TOP) // ROW_H)   # 22 rows per page
 
-    styles = getSampleStyleSheet()
-    title_style = ParagraphStyle('QuoteTitle', parent=styles['Title'], fontSize=22, textColor=colors.HexColor('#3B2F6B'), spaceAfter=4)
-    label_style = ParagraphStyle('Label', parent=styles['Normal'], fontSize=9, textColor=colors.HexColor('#888888'))
-    normal_style = ParagraphStyle('NormalSmall', parent=styles['Normal'], fontSize=10, leading=14)
-    right_style = ParagraphStyle('RightAlign', parent=styles['Normal'], fontSize=10, alignment=TA_RIGHT)
+    def page_frame(first: bool):
+        """Letterhead + header blocks + empty items grid for a page."""
+        B.draw_letterhead(c)
 
-    story = []
+        # Name / Address box
+        B.box(c, 28.8, 122.4, 282.6, 145.0)
+        B.box(c, 28.8, 145.0, 282.6, 208.8)
+        B.text(c, 31.8, 129.5, "Name / Address", 9)
+        client_top = 148.1
+        if quote.client_name:
+            B.text(c, 31.8, client_top, quote.client_name, 10)
+            client_top += 12
+        if quote.client_company:
+            B.text(c, 31.8, client_top, quote.client_company, 10)
+            client_top += 12
+        if quote.client_email:
+            B.text(c, 31.8, client_top, quote.client_email, 10)
 
-    # ── Header ──
-    story.append(Paragraph(quote.title or "Quote", title_style))
-    story.append(Paragraph(f"Quote # {quote.quote_number}", label_style))
-    story.append(Spacer(1, 4))
-    status_color = {
-        'draft': '#8A8A8A', 'sent': '#3B82F6', 'accepted': '#22C55E', 'declined': '#EF4444', 'expired': '#999999'
-    }.get(quote.status, '#8A8A8A')
-    story.append(Paragraph(f'<font color="{status_color}"><b>{quote.status.upper()}</b></font>', normal_style))
-    story.append(Spacer(1, 16))
-    story.append(HRFlowable(width="100%", color=colors.HexColor('#DDDDDD'), thickness=1))
-    story.append(Spacer(1, 16))
+        # Title
+        B.text(c, 442.7, 131.7, "Quotation", 26)
 
-    # ── From / To columns ──
-    from_lines = [f"<b>From</b>", sender_name or "", sender_email or ""]
-    to_lines = [f"<b>To</b>"]
-    if quote.client_name:
-        to_lines.append(quote.client_name)
-    if quote.client_company:
-        to_lines.append(quote.client_company)
-    if quote.client_email:
-        to_lines.append(quote.client_email)
+        # Date / Quote # grid
+        B.box(c, 298.8, 162.0, 361.8, 184.6)
+        B.box(c, 361.8, 162.0, 424.8, 184.6)
+        B.box(c, 424.8, 162.0, 496.8, 184.6)
+        B.box(c, 496.8, 162.0, 568.0, 184.6)
+        B.text_center(c, (298.8 + 361.8) / 2, 169.1, "Date", 9)
+        B.text_center(c, (361.8 + 424.8) / 2, 169.1, B.fmt_date(quote.created_at), 9)
+        B.text_center(c, (424.8 + 496.8) / 2, 169.1, "Quote #", 9)
+        B.text_center(c, (496.8 + 568.0) / 2, 169.1, quote.quote_number or "", 9)
 
-    from_para = Paragraph("<br/>".join([l for l in from_lines if l]), normal_style)
-    to_para = Paragraph("<br/>".join([l for l in to_lines if l]), normal_style)
+        # VAT row
+        B.box(c, 298.8, 184.6, 568.8, 204.4)
+        B.text_center(c, (298.8 + 568.8) / 2, 189.2, f"VAT # {B.VAT_NUMBER}", 12)
 
-    meta_lines = ["<b>Date</b>", quote.created_at.strftime("%B %d, %Y") if quote.created_at else ""]
-    if quote.valid_until:
-        meta_lines.append(f"<b>Valid Until</b>")
-        meta_lines.append(quote.valid_until.strftime("%B %d, %Y"))
-    meta_para = Paragraph("<br/>".join([l for l in meta_lines if l]), normal_style)
+        # Items table header
+        B.box(c, COLS[0], HDR_TOP, COLS[1], HDR_BOT, fill=B.ROW_GREY)
+        B.box(c, COLS[1], HDR_TOP, COLS[2], HDR_BOT, fill=B.ROW_GREY)
+        B.box(c, COLS[2], HDR_TOP, COLS[3], HDR_BOT, fill=B.ROW_GREY)
+        B.box(c, COLS[3], HDR_TOP, COLS[4], HDR_BOT, fill=B.ROW_GREY)
+        B.text_center(c, (COLS[0] + COLS[1]) / 2, 224.1, "Description", 9)
+        B.text_center(c, (COLS[1] + COLS[2]) / 2, 224.1, "Qty", 9)
+        B.text_center(c, (COLS[2] + COLS[3]) / 2, 224.1, f"Price ({currency})", 9)
+        B.text_center(c, (COLS[3] + COLS[4]) / 2, 224.1, f"Total ({currency})", 9)
 
-    header_table = Table([[from_para, to_para, meta_para]], colWidths=[2.3 * inch, 2.3 * inch, 2.3 * inch])
-    header_table.setStyle(TableStyle([
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('LEFTPADDING', (0, 0), (-1, -1), 0),
-    ]))
-    story.append(header_table)
-    story.append(Spacer(1, 24))
+        # Items body frame (grey shading + row text drawn by caller)
+        B.box(c, COLS[0], BODY_TOP, COLS[1], BODY_BOT)
+        B.box(c, COLS[1], BODY_TOP, COLS[2], BODY_BOT)
+        B.box(c, COLS[2], BODY_TOP, COLS[3], BODY_BOT)
+        B.box(c, COLS[3], BODY_TOP, COLS[4], BODY_BOT)
 
-    # ── Line items table ──
-    currency = quote.currency
-    table_data = [["Item", "Description", "Qty", "Unit Price", "Amount"]]
+    def draw_row(i: int, desc: str, qty: str, price: str, total: str):
+        """Draw one item row (i = 0-based row index on the current page)."""
+        band_top = 241.44 + i * ROW_H
+        if i % 2 == 1:  # alternating grey bands, exactly as the original
+            B.box(c, 29.8, band_top, 282.6, band_top + 10.6, fill=B.ROW_GREY, stroke=None)
+            B.box(c, 284.5, band_top, 378.8, band_top + 10.6, fill=B.ROW_GREY, stroke=None)
+            B.box(c, 380.8, band_top, 474.2, band_top + 10.6, fill=B.ROW_GREY, stroke=None)
+            B.box(c, 476.2, band_top, 569.6, band_top + 10.6, fill=B.ROW_GREY, stroke=None)
+            # redraw column edges over the fill
+            B.vline(c, COLS[1], band_top, band_top + 10.6)
+            B.vline(c, COLS[2], band_top, band_top + 10.6)
+            B.vline(c, COLS[3], band_top, band_top + 10.6)
+        t = 242.4 + i * ROW_H
+        if desc:
+            B.text(c, 31.8, t, desc, 9)
+        if qty:
+            B.text_center(c, (COLS[1] + COLS[2]) / 2 - 0.9, t, qty, 9)
+        if price:
+            B.text_right(c, 441.0, t, price, 9)
+        if total:
+            B.text_right(c, 563.5, t, total, 9)
+
+    # ── build row list: line items + optional discount + VAT ────────────────
+    rows = []
     for item in quote.line_items:
         amount = (item.quantity or 0) * (item.unit_price or 0)
-        table_data.append([
-            Paragraph(item.name, normal_style),
-            Paragraph(item.description or "", ParagraphStyle('desc', parent=normal_style, fontSize=8, textColor=colors.HexColor('#777777'))),
-            str(item.quantity).rstrip('0').rstrip('.') if '.' in str(item.quantity) else str(int(item.quantity)),
-            _fmt_money(item.unit_price, currency),
-            _fmt_money(amount, currency),
-        ])
+        rows.append((item.name or "", B.fmt_qty(item.quantity),
+                     B.fmt_amount(item.unit_price), B.fmt_amount(amount)))
+    if totals["discount_amount"] > 0:
+        if quote.discount_type == "percent":
+            rows.append(("Discount", "", f"{quote.discount_value:g}%",
+                         f"-{B.fmt_amount(totals['discount_amount'])}"))
+        else:
+            rows.append(("Discount", "", "",
+                         f"-{B.fmt_amount(totals['discount_amount'])}"))
+    if (quote.tax_percent or 0) > 0:
+        rows.append(("VAT", "", f"{quote.tax_percent:.2f}%",
+                     B.fmt_amount(totals["tax_amount"])))
 
-    items_table = Table(table_data, colWidths=[1.6 * inch, 2.0 * inch, 0.6 * inch, 1.1 * inch, 1.2 * inch], repeatRows=1)
-    items_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2E2A4A')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-        ('FONTSIZE', (0, 0), (-1, 0), 9),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('ALIGN', (2, 0), (-1, -1), 'RIGHT'),
-        ('ALIGN', (0, 0), (1, -1), 'LEFT'),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#E0E0E0')),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#FAFAFA')]),
-        ('TOPPADDING', (0, 0), (-1, -1), 8),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-        ('LEFTPADDING', (0, 0), (-1, -1), 8),
-    ]))
-    story.append(items_table)
-    story.append(Spacer(1, 16))
+    # ── paginate rows ────────────────────────────────────────────────────────
+    pages = [rows[i:i + MAX_ROWS] for i in range(0, len(rows), MAX_ROWS)] or [[]]
+    for pi, page_rows in enumerate(pages):
+        page_frame(first=(pi == 0))
+        for ri, r in enumerate(page_rows):
+            draw_row(ri, *r)
+        if pi < len(pages) - 1:
+            c.showPage()
 
-    # ── Totals ──
-    totals_data = [["Subtotal", _fmt_money(totals['subtotal'], currency)]]
-    if totals['discount_amount'] > 0:
-        discount_label = f"Discount ({quote.discount_value:g}%)" if quote.discount_type == "percent" else "Discount"
-        totals_data.append([discount_label, f"-{_fmt_money(totals['discount_amount'], currency)}"])
-    if totals['tax_amount'] > 0:
-        totals_data.append([f"Tax ({quote.tax_percent:g}%)", _fmt_money(totals['tax_amount'], currency)])
-    totals_data.append(["Total", _fmt_money(totals['total'], currency)])
+    # ── bottom section (last page, fixed positions like the original) ───────
+    # Payment terms box
+    B.box(c, 25.2, 479.8, 302.4, 511.2)
+    terms_text = (quote.notes or "").strip() or B.DEFAULT_PAYMENT_TERMS
+    for li, line in enumerate(B.wrap_text(terms_text, B.FONT, 9, 272)[:3]):
+        B.text(c, 28.2, 482.7 + li * ROW_H, line, 9)
 
-    totals_table = Table(totals_data, colWidths=[4.9 * inch, 2.0 * inch])
-    totals_table.setStyle(TableStyle([
-        ('ALIGN', (0, 0), (-1, -1), 'RIGHT'),
-        ('FONTSIZE', (0, 0), (-1, -1), 10),
-        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, -1), (-1, -1), 13),
-        ('LINEABOVE', (0, -1), (-1, -1), 1, colors.HexColor('#2E2A4A')),
-        ('TOPPADDING', (0, -1), (-1, -1), 8),
-        ('TEXTCOLOR', (0, -1), (-1, -1), colors.HexColor('#2E2A4A')),
-    ]))
-    story.append(totals_table)
+    # Total box
+    B.box(c, 302.4, 479.8, 573.4, 511.2)
+    B.text(c, 314.4, 488.7, f"Total in {B.currency_long(currency)}", 12)
+    B.text_right(c, 568.5, 491.3, B.fmt_amount(totals["total"]), 9)
 
-    # ── Notes / terms ──
-    if quote.notes:
-        story.append(Spacer(1, 24))
-        story.append(HRFlowable(width="100%", color=colors.HexColor('#EEEEEE'), thickness=1))
-        story.append(Spacer(1, 10))
-        story.append(Paragraph("<b>Notes</b>", normal_style))
-        story.append(Paragraph(quote.notes.replace('\n', '<br/>'), ParagraphStyle('notes', parent=normal_style, fontSize=9, textColor=colors.HexColor('#555555'))))
+    # Terms and Conditions box
+    B.box(c, 25.2, 511.2, 573.4, 601.2)
+    B.text(c, 28.2, 525.9, "Terms and Conditions:", 9)
+    duration = getattr(quote, "job_duration", None) or B.DEFAULT_JOB_DURATION
+    clause_top = 536.4
+    for clause in B.QUOTE_TERMS_AND_CONDITIONS:
+        if clause == "__DURATION__":
+            prefix = "2-The duration to complete the above job will be"
+            B.text(c, 28.2, clause_top, prefix, 9)
+            B.text(c, 204.1, clause_top,
+                   "________________________________", 9)
+            B.text_center(c, 265.0, clause_top - 1.2, str(duration), 9, font=B.FONT_LIGHT)
+            B.text(c, 329.3, clause_top, "Business Days", 9)
+        else:
+            B.text(c, 28.2, clause_top, clause, 9)
+        clause_top += ROW_H
 
-    doc.build(story)
+    # Signature + stamp, underlines and captions
+    B.draw_signature_and_stamp(
+        c,
+        sig_x=47.8, sig_top=616.6, sig_w=145.8, sig_h=89.0,
+        stamp_x=156.6, stamp_top=601.2, stamp_size=114.4,
+    )
+    B.hline(c, 46.8, 271.8, 707.4)
+    B.text(c, 88.0, 710.6, "Signatures on behalf of Company", 9)
+    B.hline(c, 328.6, 553.6, 706.6)
+    B.text(c, 353.3, 709.8, "Customer Acceptance Signature & Name", 9)
+
+    c.showPage()
+    c.save()
     buffer.seek(0)
     return buffer.read()
