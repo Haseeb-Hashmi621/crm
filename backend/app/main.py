@@ -27,6 +27,7 @@ from app.api.v1.forms import router as forms_router
 from app.api.v1.calendar import router as calendar_router
 from app.api.v1.chatbot import router as chatbot_router
 from app.api.v1.knowledge_base import router as knowledge_base_router
+from app.services.scheduler_service import start_scheduler, stop_scheduler
 
 app = FastAPI(
     title="CRM API",
@@ -75,6 +76,19 @@ app.include_router(forms_router, prefix="/forms", tags=["Forms"])
 app.include_router(calendar_router, prefix="/calendar", tags=["Calendar"])
 app.include_router(chatbot_router, prefix="/chatbot", tags=["Chatbot"])
 app.include_router(knowledge_base_router, prefix="/knowledge-base", tags=["Knowledge Base"])
+
+
+@app.on_event("startup")
+def _on_startup():
+    # Priority 5 — Campaign Scheduling: starts the background poller that
+    # checks every 60s for scheduled email/SMS/WhatsApp campaigns that are due.
+    start_scheduler()
+
+
+@app.on_event("shutdown")
+def _on_shutdown():
+    stop_scheduler()
+
 
 @app.get("/")
 def root():

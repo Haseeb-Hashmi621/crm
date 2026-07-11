@@ -11,7 +11,9 @@ import toast from 'react-hot-toast'
 
 const STATUS_CONFIG = {
   draft: { label: 'Draft', color: 'text-gray-400', bg: 'bg-gray-500/10', border: 'border-gray-500/30', icon: Clock },
+  scheduled: { label: 'Scheduled', color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/30', icon: Clock },
   sent: { label: 'Sent', color: 'text-green-400', bg: 'bg-green-500/10', border: 'border-green-500/30', icon: CheckCircle2 },
+  failed: { label: 'Failed', color: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/30', icon: AlertCircle },
 }
 
 function TimeAgo({ dateString }) {
@@ -77,6 +79,7 @@ function EmailCampaigns() {
   const [form, setForm] = useState({ name: '', subject: '', body: '' })
   const [showTemplatePicker, setShowTemplatePicker] = useState(false)
   const [availableTemplates, setAvailableTemplates] = useState([])
+  const [scheduleAt, setScheduleAt] = useState('')
 
   useEffect(() => { fetchCampaigns(); fetchContacts(); fetchTemplates() }, [])
 
@@ -118,7 +121,7 @@ function EmailCampaigns() {
   }
 
   const openSendModal = (campaign) => {
-    setSelectedCampaign(campaign); setSelectedContacts([]); setSendToAll(true); setShowSendModal(true)
+    setSelectedCampaign(campaign); setSelectedContacts([]); setSendToAll(true); setScheduleAt(''); setShowSendModal(true)
   }
 
   const handleSend = async () => {
@@ -131,6 +134,26 @@ function EmailCampaigns() {
       fetchCampaigns(); setShowSendModal(false)
     } catch (err) { toast.error(err.response?.data?.detail || 'Failed to send') }
     finally { setSending(false) }
+  }
+
+  const handleSchedule = async () => {
+    if (!selectedCampaign || !scheduleAt) { toast.error('Pick a date and time'); return }
+    setSending(true)
+    try {
+      const iso = new Date(scheduleAt).toISOString()
+      await api.post(`/campaigns/${selectedCampaign.id}/schedule`, { scheduled_at: iso })
+      toast.success('Campaign scheduled!')
+      fetchCampaigns(); setShowSendModal(false)
+    } catch (err) { toast.error(err.response?.data?.detail || 'Failed to schedule') }
+    finally { setSending(false) }
+  }
+
+  const handleCancelSchedule = async (id) => {
+    try {
+      await api.delete(`/campaigns/${id}/schedule`)
+      toast.success('Schedule cancelled — back to draft')
+      fetchCampaigns()
+    } catch (err) { toast.error(err.response?.data?.detail || 'Failed to cancel') }
   }
 
   const openDetailModal = async (campaign) => {
@@ -249,6 +272,25 @@ function EmailCampaigns() {
                         <Send className="w-3.5 h-3.5" />Send
                       </motion.button>
                     )}
+                    {campaign.status === 'scheduled' && (
+                      <>
+                        <span className="text-xs text-blue-400 flex items-center gap-1 px-2">
+                          <Clock className="w-3.5 h-3.5" />
+                          {new Date(campaign.scheduled_at).toLocaleString()}
+                        </span>
+                        <motion.button whileHover={{ scale: 1.05 }} onClick={() => handleCancelSchedule(campaign.id)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white text-xs transition-colors">
+                          Cancel
+                        </motion.button>
+                      </>
+                    )}
+                    {campaign.status === 'failed' && (
+                      <motion.button whileHover={{ scale: 1.05 }} onClick={() => openSendModal(campaign)}
+                        title={campaign.schedule_failed_reason || 'Send failed — click to retry'}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs transition-colors">
+                        <Send className="w-3.5 h-3.5" />Retry
+                      </motion.button>
+                    )}
                     <motion.button whileHover={{ scale: 1.1 }} onClick={() => handleDelete(campaign.id)}
                       className="p-1.5 text-gray-600 hover:text-red-400 transition-colors">
                       <Trash2 className="w-4 h-4" />
@@ -332,6 +374,26 @@ function EmailCampaigns() {
                 <p className="text-white text-sm font-medium">{selectedCampaign.name}</p>
                 <p className="text-gray-400 text-xs mt-1">{selectedCampaign.subject}</p>
               </div>
+
+              <div className="mb-4 flex items-center gap-2 bg-gray-800 rounded-xl p-1">
+                <button onClick={() => setScheduleAt('')}
+                  className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${!scheduleAt ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}>
+                  Send Now
+                </button>
+                <button onClick={() => setScheduleAt(prev => prev || new Date(Date.now() + 30 * 60000).toISOString().slice(0, 16))}
+                  className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${scheduleAt ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}>
+                  Schedule for Later
+                </button>
+              </div>
+              {scheduleAt && (
+                <div className="mb-4">
+                  <label className="text-sm font-medium text-gray-300 mb-1.5 block">Send at</label>
+                  <input type="datetime-local" value={scheduleAt} onChange={e => setScheduleAt(e.target.value)}
+                    min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-violet-500 transition-colors" />
+                </div>
+              )}
+
               <div className="mb-4">
                 <p className="text-sm font-medium text-gray-300 mb-3">Send to:</p>
                 <div className="space-y-2">
@@ -370,11 +432,12 @@ function EmailCampaigns() {
               <div className="flex gap-3">
                 <button onClick={() => setShowSendModal(false)}
                   className="flex-1 py-2.5 rounded-xl border border-gray-700 text-gray-400 hover:text-white text-sm transition-colors">Cancel</button>
-                <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={handleSend}
-                  disabled={sending || (!sendToAll && selectedContacts.length === 0)}
+                <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                  onClick={scheduleAt ? handleSchedule : handleSend}
+                  disabled={sending || (!sendToAll && selectedContacts.length === 0) || (scheduleAt && new Date(scheduleAt) <= new Date())}
                   className="flex-1 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white text-sm font-medium transition-colors flex items-center justify-center gap-2">
-                  {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                  {sending ? 'Sending...' : 'Send Now'}
+                  {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : scheduleAt ? <Clock className="w-4 h-4" /> : <Send className="w-4 h-4" />}
+                  {sending ? (scheduleAt ? 'Scheduling...' : 'Sending...') : scheduleAt ? 'Schedule Campaign' : 'Send Now'}
                 </motion.button>
               </div>
             </motion.div>
@@ -479,6 +542,7 @@ function SmsCampaigns() {
   const [selectedContacts, setSelectedContacts] = useState([])
   const [sendToAll, setSendToAll] = useState(true)
   const [form, setForm] = useState({ name: '', message: '' })
+  const [scheduleAt, setScheduleAt] = useState('')
 
   const SMS_LIMIT = 160
   const charsLeft = SMS_LIMIT - form.message.length
@@ -515,7 +579,7 @@ function SmsCampaigns() {
   }
 
   const openSendModal = (campaign) => {
-    setSelectedCampaign(campaign); setSelectedContacts([]); setSendToAll(true); setShowSendModal(true)
+    setSelectedCampaign(campaign); setSelectedContacts([]); setSendToAll(true); setScheduleAt(''); setShowSendModal(true)
   }
 
   const handleSend = async () => {
@@ -528,6 +592,26 @@ function SmsCampaigns() {
       fetchCampaigns(); setShowSendModal(false)
     } catch (err) { toast.error(err.response?.data?.detail || 'Failed to send') }
     finally { setSending(false) }
+  }
+
+  const handleSchedule = async () => {
+    if (!selectedCampaign || !scheduleAt) { toast.error('Pick a date and time'); return }
+    setSending(true)
+    try {
+      const iso = new Date(scheduleAt).toISOString()
+      await api.post(`/sms-campaigns/${selectedCampaign.id}/schedule`, { scheduled_at: iso })
+      toast.success('SMS campaign scheduled!')
+      fetchCampaigns(); setShowSendModal(false)
+    } catch (err) { toast.error(err.response?.data?.detail || 'Failed to schedule') }
+    finally { setSending(false) }
+  }
+
+  const handleCancelSchedule = async (id) => {
+    try {
+      await api.delete(`/sms-campaigns/${id}/schedule`)
+      toast.success('Schedule cancelled — back to draft')
+      fetchCampaigns()
+    } catch (err) { toast.error(err.response?.data?.detail || 'Failed to cancel') }
   }
 
   const openDetailModal = async (campaign) => {
@@ -632,6 +716,25 @@ function SmsCampaigns() {
                         <Send className="w-3.5 h-3.5" />Send SMS
                       </motion.button>
                     )}
+                    {campaign.status === 'scheduled' && (
+                      <>
+                        <span className="text-xs text-blue-400 flex items-center gap-1 px-2">
+                          <Clock className="w-3.5 h-3.5" />
+                          {new Date(campaign.scheduled_at).toLocaleString()}
+                        </span>
+                        <motion.button whileHover={{ scale: 1.05 }} onClick={() => handleCancelSchedule(campaign.id)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white text-xs transition-colors">
+                          Cancel
+                        </motion.button>
+                      </>
+                    )}
+                    {campaign.status === 'failed' && (
+                      <motion.button whileHover={{ scale: 1.05 }} onClick={() => openSendModal(campaign)}
+                        title={campaign.schedule_failed_reason || 'Send failed — click to retry'}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs transition-colors">
+                        <Send className="w-3.5 h-3.5" />Retry
+                      </motion.button>
+                    )}
                     <motion.button whileHover={{ scale: 1.1 }} onClick={() => handleDelete(campaign.id)}
                       className="p-1.5 text-gray-600 hover:text-red-400 transition-colors">
                       <Trash2 className="w-4 h-4" />
@@ -712,6 +815,26 @@ function SmsCampaigns() {
                 <p className="text-white text-sm font-medium">{selectedCampaign.name}</p>
                 <p className="text-gray-400 text-xs mt-1 line-clamp-2">{selectedCampaign.message}</p>
               </div>
+
+              <div className="mb-4 flex items-center gap-2 bg-gray-800 rounded-xl p-1">
+                <button onClick={() => setScheduleAt('')}
+                  className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${!scheduleAt ? 'bg-green-600 text-white' : 'text-gray-400 hover:text-white'}`}>
+                  Send Now
+                </button>
+                <button onClick={() => setScheduleAt(prev => prev || new Date(Date.now() + 30 * 60000).toISOString().slice(0, 16))}
+                  className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${scheduleAt ? 'bg-green-600 text-white' : 'text-gray-400 hover:text-white'}`}>
+                  Schedule for Later
+                </button>
+              </div>
+              {scheduleAt && (
+                <div className="mb-4">
+                  <label className="text-sm font-medium text-gray-300 mb-1.5 block">Send at</label>
+                  <input type="datetime-local" value={scheduleAt} onChange={e => setScheduleAt(e.target.value)}
+                    min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-green-500 transition-colors" />
+                </div>
+              )}
+
               {contactsWithPhone.length < contacts.length && (
                 <div className="flex items-start gap-2 bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-3 mb-4">
                   <AlertCircle className="w-4 h-4 text-yellow-400 flex-shrink-0 mt-0.5" />
@@ -762,11 +885,12 @@ function SmsCampaigns() {
               <div className="flex gap-3">
                 <button onClick={() => setShowSendModal(false)}
                   className="flex-1 py-2.5 rounded-xl border border-gray-700 text-gray-400 hover:text-white text-sm transition-colors">Cancel</button>
-                <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={handleSend}
-                  disabled={sending || (!sendToAll && selectedContacts.length === 0)}
+                <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                  onClick={scheduleAt ? handleSchedule : handleSend}
+                  disabled={sending || (!sendToAll && selectedContacts.length === 0) || (scheduleAt && new Date(scheduleAt) <= new Date())}
                   className="flex-1 py-2.5 rounded-xl bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white text-sm font-medium transition-colors flex items-center justify-center gap-2">
-                  {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                  {sending ? 'Sending...' : 'Send SMS'}
+                  {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : scheduleAt ? <Clock className="w-4 h-4" /> : <Send className="w-4 h-4" />}
+                  {sending ? (scheduleAt ? 'Scheduling...' : 'Sending...') : scheduleAt ? 'Schedule SMS' : 'Send SMS'}
                 </motion.button>
               </div>
             </motion.div>
@@ -834,6 +958,7 @@ function WhatsappCampaigns() {
   const [selectedContacts, setSelectedContacts] = useState([])
   const [sendToAll, setSendToAll] = useState(true)
   const [form, setForm] = useState({ name: '', message: '' })
+  const [scheduleAt, setScheduleAt] = useState('')
 
   const WA_LIMIT = 4096
   const charsUsed = form.message.length
@@ -870,7 +995,7 @@ function WhatsappCampaigns() {
   }
 
   const openSendModal = (campaign) => {
-    setSelectedCampaign(campaign); setSelectedContacts([]); setSendToAll(true); setShowSendModal(true)
+    setSelectedCampaign(campaign); setSelectedContacts([]); setSendToAll(true); setScheduleAt(''); setShowSendModal(true)
   }
 
   const handleSend = async () => {
@@ -883,6 +1008,26 @@ function WhatsappCampaigns() {
       fetchCampaigns(); setShowSendModal(false)
     } catch (err) { toast.error(err.response?.data?.detail || 'Failed to send') }
     finally { setSending(false) }
+  }
+
+  const handleSchedule = async () => {
+    if (!selectedCampaign || !scheduleAt) { toast.error('Pick a date and time'); return }
+    setSending(true)
+    try {
+      const iso = new Date(scheduleAt).toISOString()
+      await api.post(`/whatsapp-campaigns/${selectedCampaign.id}/schedule`, { scheduled_at: iso })
+      toast.success('WhatsApp campaign scheduled!')
+      fetchCampaigns(); setShowSendModal(false)
+    } catch (err) { toast.error(err.response?.data?.detail || 'Failed to schedule') }
+    finally { setSending(false) }
+  }
+
+  const handleCancelSchedule = async (id) => {
+    try {
+      await api.delete(`/whatsapp-campaigns/${id}/schedule`)
+      toast.success('Schedule cancelled — back to draft')
+      fetchCampaigns()
+    } catch (err) { toast.error(err.response?.data?.detail || 'Failed to cancel') }
   }
 
   const openDetailModal = async (campaign) => {
@@ -1011,6 +1156,25 @@ function WhatsappCampaigns() {
                         <Send className="w-3.5 h-3.5" />Send WA
                       </motion.button>
                     )}
+                    {campaign.status === 'scheduled' && (
+                      <>
+                        <span className="text-xs text-blue-400 flex items-center gap-1 px-2">
+                          <Clock className="w-3.5 h-3.5" />
+                          {new Date(campaign.scheduled_at).toLocaleString()}
+                        </span>
+                        <motion.button whileHover={{ scale: 1.05 }} onClick={() => handleCancelSchedule(campaign.id)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white text-xs transition-colors">
+                          Cancel
+                        </motion.button>
+                      </>
+                    )}
+                    {campaign.status === 'failed' && (
+                      <motion.button whileHover={{ scale: 1.05 }} onClick={() => openSendModal(campaign)}
+                        title={campaign.schedule_failed_reason || 'Send failed — click to retry'}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs transition-colors">
+                        <Send className="w-3.5 h-3.5" />Retry
+                      </motion.button>
+                    )}
                     <motion.button whileHover={{ scale: 1.1 }} onClick={() => handleDelete(campaign.id)}
                       className="p-1.5 text-gray-600 hover:text-red-400 transition-colors">
                       <Trash2 className="w-4 h-4" />
@@ -1114,6 +1278,25 @@ function WhatsappCampaigns() {
                 </p>
               </div>
 
+              <div className="mb-4 flex items-center gap-2 bg-gray-800 rounded-xl p-1">
+                <button onClick={() => setScheduleAt('')}
+                  className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${!scheduleAt ? 'bg-green-600 text-white' : 'text-gray-400 hover:text-white'}`}>
+                  Send Now
+                </button>
+                <button onClick={() => setScheduleAt(prev => prev || new Date(Date.now() + 30 * 60000).toISOString().slice(0, 16))}
+                  className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${scheduleAt ? 'bg-green-600 text-white' : 'text-gray-400 hover:text-white'}`}>
+                  Schedule for Later
+                </button>
+              </div>
+              {scheduleAt && (
+                <div className="mb-4">
+                  <label className="text-sm font-medium text-gray-300 mb-1.5 block">Send at</label>
+                  <input type="datetime-local" value={scheduleAt} onChange={e => setScheduleAt(e.target.value)}
+                    min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-green-500 transition-colors" />
+                </div>
+              )}
+
               {contactsWithPhone.length < contacts.length && (
                 <div className="flex items-start gap-2 bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-3 mb-4">
                   <AlertCircle className="w-4 h-4 text-yellow-400 flex-shrink-0 mt-0.5" />
@@ -1166,11 +1349,12 @@ function WhatsappCampaigns() {
               <div className="flex gap-3">
                 <button onClick={() => setShowSendModal(false)}
                   className="flex-1 py-2.5 rounded-xl border border-gray-700 text-gray-400 hover:text-white text-sm transition-colors">Cancel</button>
-                <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={handleSend}
-                  disabled={sending || (!sendToAll && selectedContacts.length === 0)}
+                <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                  onClick={scheduleAt ? handleSchedule : handleSend}
+                  disabled={sending || (!sendToAll && selectedContacts.length === 0) || (scheduleAt && new Date(scheduleAt) <= new Date())}
                   className="flex-1 py-2.5 rounded-xl bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white text-sm font-medium transition-colors flex items-center justify-center gap-2">
-                  {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageCircle className="w-4 h-4" />}
-                  {sending ? 'Sending...' : 'Send WhatsApp'}
+                  {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : scheduleAt ? <Clock className="w-4 h-4" /> : <MessageCircle className="w-4 h-4" />}
+                  {sending ? (scheduleAt ? 'Scheduling...' : 'Sending...') : scheduleAt ? 'Schedule Campaign' : 'Send WhatsApp'}
                 </motion.button>
               </div>
             </motion.div>

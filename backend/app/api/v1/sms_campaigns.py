@@ -5,7 +5,8 @@ from app.core.deps import get_current_user
 from app.models.user import User
 from app.services.sms_campaign_service import (
     get_sms_campaigns, get_sms_campaign, create_sms_campaign,
-    delete_sms_campaign, send_sms_campaign, get_sms_recipients
+    delete_sms_campaign, send_sms_campaign, get_sms_recipients,
+    schedule_sms_campaign, cancel_sms_schedule
 )
 from pydantic import BaseModel
 from typing import Optional, List
@@ -29,6 +30,8 @@ class SmsCampaignResponse(BaseModel):
     sent_count: int
     created_at: datetime
     sent_at: Optional[datetime] = None
+    scheduled_at: Optional[datetime] = None
+    schedule_failed_reason: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -50,6 +53,10 @@ class SmsRecipientResponse(BaseModel):
 
 class SendSmsRequest(BaseModel):
     contact_ids: Optional[List[UUID]] = None
+
+
+class ScheduleSmsRequest(BaseModel):
+    scheduled_at: datetime
 
 
 @router.get("/", response_model=List[SmsCampaignResponse])
@@ -94,6 +101,33 @@ def send_sms(
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
     return result
+
+
+# ── Scheduling (Priority 5) ───────────────────────────────────────────────────
+
+@router.post("/{campaign_id}/schedule", response_model=SmsCampaignResponse)
+def schedule_sms_route(
+    campaign_id: str,
+    data: ScheduleSmsRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    result = schedule_sms_campaign(db, campaign_id, current_user.id, data.scheduled_at)
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result["campaign"]
+
+
+@router.delete("/{campaign_id}/schedule", response_model=SmsCampaignResponse)
+def cancel_sms_schedule_route(
+    campaign_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    result = cancel_sms_schedule(db, campaign_id, current_user.id)
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result["campaign"]
 
 
 @router.get("/{campaign_id}/recipients", response_model=List[SmsRecipientResponse])

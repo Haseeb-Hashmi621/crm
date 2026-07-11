@@ -12,11 +12,15 @@ class WhatsappCampaign(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     name = Column(String, nullable=False)
     message = Column(Text, nullable=False)
-    status = Column(String, default="draft")
+    status = Column(String, default="draft")  # draft | scheduled | sent | failed
     sent_count = Column(Integer, default=0)
     failed_count = Column(Integer, default=0)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     sent_at = Column(DateTime(timezone=True), nullable=True)
+
+    # ── Scheduling ───────────────────────────────────────────────────────────
+    scheduled_at = Column(DateTime(timezone=True), nullable=True)
+    schedule_failed_reason = Column(Text, nullable=True)
 
 
 class WhatsappCampaignRecipient(Base):

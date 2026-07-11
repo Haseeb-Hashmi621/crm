@@ -13,12 +13,16 @@ class Campaign(Base):
     name = Column(String, nullable=False)
     subject = Column(String, nullable=False)
     body = Column(Text, nullable=False)
-    status = Column(String, default="draft")
+    status = Column(String, default="draft")  # draft | scheduled | sent | failed
     sent_count = Column(Integer, default=0)
     open_count = Column(Integer, default=0)
     click_count = Column(Integer, default=0)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     sent_at = Column(DateTime(timezone=True), nullable=True)
+
+    # ── Scheduling ───────────────────────────────────────────────────────────
+    scheduled_at = Column(DateTime(timezone=True), nullable=True)
+    schedule_failed_reason = Column(Text, nullable=True)
 
 
 class CampaignRecipient(Base):

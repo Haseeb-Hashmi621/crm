@@ -56,6 +56,48 @@ def delete_sms_campaign(db: Session, campaign_id: str, user_id: uuid.UUID) -> bo
     return True
 
 
+# ── Scheduling (Priority 5) ───────────────────────────────────────────────────
+
+def schedule_sms_campaign(
+    db: Session, campaign_id: str, user_id: uuid.UUID, scheduled_at: datetime
+) -> dict:
+    campaign = get_sms_campaign(db, campaign_id, user_id)
+    if not campaign:
+        return {"error": "Campaign not found"}
+
+    if campaign.status not in ("draft", "scheduled", "failed"):
+        return {"error": f"Cannot schedule a campaign with status '{campaign.status}'"}
+
+    if scheduled_at.tzinfo is None:
+        scheduled_at = scheduled_at.replace(tzinfo=timezone.utc)
+
+    if scheduled_at <= datetime.now(timezone.utc):
+        return {"error": "Scheduled time must be in the future"}
+
+    campaign.status = "scheduled"
+    campaign.scheduled_at = scheduled_at
+    campaign.schedule_failed_reason = None
+    db.commit()
+    db.refresh(campaign)
+    return {"campaign": campaign}
+
+
+def cancel_sms_schedule(db: Session, campaign_id: str, user_id: uuid.UUID) -> dict:
+    campaign = get_sms_campaign(db, campaign_id, user_id)
+    if not campaign:
+        return {"error": "Campaign not found"}
+
+    if campaign.status != "scheduled":
+        return {"error": f"Campaign is not scheduled (status: '{campaign.status}')"}
+
+    campaign.status = "draft"
+    campaign.scheduled_at = None
+    campaign.schedule_failed_reason = None
+    db.commit()
+    db.refresh(campaign)
+    return {"campaign": campaign}
+
+
 def send_sms_campaign(
     db: Session,
     campaign_id: str,
@@ -129,6 +171,8 @@ def send_sms_campaign(
     campaign.status = "sent"
     campaign.sent_count = sent_count
     campaign.sent_at = datetime.now(timezone.utc)
+    campaign.scheduled_at = None
+    campaign.schedule_failed_reason = None
     db.commit()
 
     return {

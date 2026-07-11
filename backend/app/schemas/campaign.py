@@ -45,6 +45,8 @@ class CampaignResponse(BaseModel):
     click_count: int
     created_at: datetime
     sent_at: Optional[datetime] = None
+    scheduled_at: Optional[datetime] = None
+    schedule_failed_reason: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -52,3 +54,7 @@ class CampaignResponse(BaseModel):
 
 class SendCampaignRequest(BaseModel):
     contact_ids: Optional[List[UUID]] = None
+
+
+class ScheduleCampaignRequest(BaseModel):
+    scheduled_at: datetime

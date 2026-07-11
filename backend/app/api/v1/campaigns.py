@@ -5,11 +5,14 @@ from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
 from app.models.campaign import Campaign, CampaignRecipient
-from app.schemas.campaign import CampaignCreate, CampaignUpdate, CampaignResponse, CampaignRecipientResponse, SendCampaignRequest
+from app.schemas.campaign import (
+    CampaignCreate, CampaignUpdate, CampaignResponse, CampaignRecipientResponse,
+    SendCampaignRequest, ScheduleCampaignRequest
+)
 from app.services.campaign_service import (
     get_campaigns, get_campaign, create_campaign,
     update_campaign, delete_campaign, send_campaign,
-    get_campaign_recipients
+    get_campaign_recipients, schedule_campaign, cancel_schedule
 )
 from typing import List
 from datetime import datetime, timezone
@@ -125,6 +128,33 @@ def send_campaign_route(
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
     return result
+
+
+# ── Scheduling (Priority 5) ───────────────────────────────────────────────────
+
+@router.post("/{campaign_id}/schedule", response_model=CampaignResponse)
+def schedule_campaign_route(
+    campaign_id: str,
+    data: ScheduleCampaignRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    result = schedule_campaign(db, campaign_id, current_user.id, data.scheduled_at)
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result["campaign"]
+
+
+@router.delete("/{campaign_id}/schedule", response_model=CampaignResponse)
+def cancel_campaign_schedule_route(
+    campaign_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    result = cancel_schedule(db, campaign_id, current_user.id)
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result["campaign"]
 
 
 @router.get("/{campaign_id}/recipients", response_model=List[CampaignRecipientResponse])
