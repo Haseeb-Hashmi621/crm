@@ -68,14 +68,20 @@ def delete_whatsapp_campaign(
 # ── Scheduling (Priority 5) ───────────────────────────────────────────────────
 
 def schedule_whatsapp_campaign(
-    db: Session, campaign_id: str, user_id: uuid.UUID, scheduled_at: datetime
+    db: Session,
+    campaign_id: str,
+    user_id: uuid.UUID,
+    scheduled_at: datetime,
+    contact_ids: Optional[List[uuid.UUID]] = None,
 ) -> dict:
     campaign = get_whatsapp_campaign(db, campaign_id, user_id)
     if not campaign:
         return {"error": "Campaign not found"}
 
     if campaign.status not in ("draft", "scheduled", "failed"):
-        return {"error": f"Cannot schedule a campaign with status '{campaign.status}'"}
+        return {
+            "error": f"Cannot schedule a campaign with status '{campaign.status}'"
+        }
 
     if scheduled_at.tzinfo is None:
         scheduled_at = scheduled_at.replace(tzinfo=timezone.utc)
@@ -85,25 +91,39 @@ def schedule_whatsapp_campaign(
 
     campaign.status = "scheduled"
     campaign.scheduled_at = scheduled_at
+    campaign.scheduled_contact_ids = (
+        [str(cid) for cid in contact_ids] if contact_ids else None
+    )
     campaign.schedule_failed_reason = None
+
     db.commit()
     db.refresh(campaign)
+
     return {"campaign": campaign}
 
 
-def cancel_whatsapp_schedule(db: Session, campaign_id: str, user_id: uuid.UUID) -> dict:
+def cancel_whatsapp_schedule(
+    db: Session,
+    campaign_id: str,
+    user_id: uuid.UUID
+) -> dict:
     campaign = get_whatsapp_campaign(db, campaign_id, user_id)
     if not campaign:
         return {"error": "Campaign not found"}
 
     if campaign.status != "scheduled":
-        return {"error": f"Campaign is not scheduled (status: '{campaign.status}')"}
+        return {
+            "error": f"Campaign is not scheduled (status: '{campaign.status}')"
+        }
 
     campaign.status = "draft"
     campaign.scheduled_at = None
+    campaign.scheduled_contact_ids = None
     campaign.schedule_failed_reason = None
+
     db.commit()
     db.refresh(campaign)
+
     return {"campaign": campaign}
 
 
@@ -185,7 +205,9 @@ def send_whatsapp_campaign(
     campaign.failed_count = failed_count
     campaign.sent_at = datetime.now(timezone.utc)
     campaign.scheduled_at = None
+    campaign.scheduled_contact_ids = None
     campaign.schedule_failed_reason = None
+
     db.commit()
 
     return {
@@ -197,11 +219,14 @@ def send_whatsapp_campaign(
 
 
 def get_whatsapp_recipients(
-    db: Session, campaign_id: str, user_id: uuid.UUID
+    db: Session,
+    campaign_id: str,
+    user_id: uuid.UUID
 ) -> List[WhatsappCampaignRecipient]:
     campaign = get_whatsapp_campaign(db, campaign_id, user_id)
     if not campaign:
         return []
+
     return db.query(WhatsappCampaignRecipient).filter(
         WhatsappCampaignRecipient.campaign_id == campaign_id
     ).all()

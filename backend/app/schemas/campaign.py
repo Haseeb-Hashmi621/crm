@@ -58,3 +58,6 @@ class SendCampaignRequest(BaseModel):
 
 class ScheduleCampaignRequest(BaseModel):
     scheduled_at: datetime
+    # Specific contacts chosen in the "Select specific contacts" UI path.
+    # None/omitted = all contacts (matches send_campaign's existing default).
+    contact_ids: Optional[List[UUID]] = None

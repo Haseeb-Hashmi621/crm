@@ -139,7 +139,13 @@ def schedule_campaign_route(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    result = schedule_campaign(db, campaign_id, current_user.id, data.scheduled_at)
+    result = schedule_campaign(
+        db,
+        campaign_id,
+        current_user.id,
+        data.scheduled_at,
+        data.contact_ids,
+    )
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
     return result["campaign"]

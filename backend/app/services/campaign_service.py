@@ -61,9 +61,17 @@ def delete_campaign(db: Session, campaign_id: str, user_id: uuid.UUID) -> bool:
 # ── Scheduling (Priority 5) ───────────────────────────────────────────────────
 
 def schedule_campaign(
-    db: Session, campaign_id: str, user_id: uuid.UUID, scheduled_at: datetime
+    db: Session,
+    campaign_id: str,
+    user_id: uuid.UUID,
+    scheduled_at: datetime,
+    contact_ids: Optional[List[uuid.UUID]] = None,
 ) -> dict:
-    """Marks a draft campaign to be auto-sent at scheduled_at by the background scheduler."""
+    """Marks a draft campaign to be auto-sent at scheduled_at by the background scheduler.
+
+    contact_ids, if provided, is persisted so the scheduler sends to exactly
+    those contacts instead of defaulting to everyone (previously this
+    selection was silently dropped)."""
     campaign = get_campaign(db, campaign_id, user_id)
     if not campaign:
         return {"error": "Campaign not found"}
@@ -79,6 +87,7 @@ def schedule_campaign(
 
     campaign.status = "scheduled"
     campaign.scheduled_at = scheduled_at
+    campaign.scheduled_contact_ids = [str(cid) for cid in contact_ids] if contact_ids else None
     campaign.schedule_failed_reason = None
     db.commit()
     db.refresh(campaign)
@@ -96,6 +105,7 @@ def cancel_schedule(db: Session, campaign_id: str, user_id: uuid.UUID) -> dict:
 
     campaign.status = "draft"
     campaign.scheduled_at = None
+    campaign.scheduled_contact_ids = None
     campaign.schedule_failed_reason = None
     db.commit()
     db.refresh(campaign)
@@ -136,7 +146,6 @@ def send_campaign(
         personalized_body = personalized_body.replace("{{email}}", contact.email)
         personalized_body = personalized_body.replace("{{company}}", contact.company or "")
 
-        # Pre-create recipient to get ID for pixel URL
         recipient = CampaignRecipient(
             campaign_id=campaign.id,
             contact_id=contact.id,
@@ -145,7 +154,7 @@ def send_campaign(
             status="pending",
         )
         db.add(recipient)
-        db.flush()  # get recipient.id without full commit
+        db.flush()
 
         pixel_url = f"{settings.PUBLIC_BACKEND_URL}/campaigns/track/{campaign.id}/{recipient.id}/open.gif"
 
@@ -176,6 +185,7 @@ def send_campaign(
     campaign.sent_count = sent_count
     campaign.sent_at = datetime.now(timezone.utc)
     campaign.scheduled_at = None
+    campaign.scheduled_contact_ids = None
     campaign.schedule_failed_reason = None
     db.commit()
 

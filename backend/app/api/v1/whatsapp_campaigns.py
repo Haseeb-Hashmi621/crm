@@ -60,6 +60,7 @@ class SendWhatsappRequest(BaseModel):
 
 class ScheduleWhatsappRequest(BaseModel):
     scheduled_at: datetime
+    contact_ids: Optional[List[UUID]] = None
 
 
 @router.get("/", response_model=List[WhatsappCampaignResponse])
@@ -99,7 +100,10 @@ def send_whatsapp(
     current_user: User = Depends(get_current_user)
 ):
     result = send_whatsapp_campaign(
-        db, campaign_id, current_user.id, data.contact_ids
+        db,
+        campaign_id,
+        current_user.id,
+        data.contact_ids
     )
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
@@ -115,7 +119,13 @@ def schedule_whatsapp_route(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    result = schedule_whatsapp_campaign(db, campaign_id, current_user.id, data.scheduled_at)
+    result = schedule_whatsapp_campaign(
+        db,
+        campaign_id,
+        current_user.id,
+        data.scheduled_at,
+        data.contact_ids,
+    )
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
     return result["campaign"]

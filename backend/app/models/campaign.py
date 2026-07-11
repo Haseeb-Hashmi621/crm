@@ -1,6 +1,6 @@
 import uuid
 from sqlalchemy import Column, String, Text, Integer, Boolean, DateTime, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSON
 from sqlalchemy.sql import func
 from app.core.database import Base
 
@@ -23,6 +23,9 @@ class Campaign(Base):
     # ── Scheduling ───────────────────────────────────────────────────────────
     scheduled_at = Column(DateTime(timezone=True), nullable=True)
     schedule_failed_reason = Column(Text, nullable=True)
+    # Specific contact IDs (as strings) chosen at schedule time.
+    # NULL/empty = send to all contacts (same as immediate-send default).
+    scheduled_contact_ids = Column(JSON, nullable=True)
 
 
 class CampaignRecipient(Base):

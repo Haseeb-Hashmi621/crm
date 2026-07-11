@@ -141,7 +141,10 @@ function EmailCampaigns() {
     setSending(true)
     try {
       const iso = new Date(scheduleAt).toISOString()
-      await api.post(`/campaigns/${selectedCampaign.id}/schedule`, { scheduled_at: iso })
+      const payload = sendToAll
+        ? { scheduled_at: iso, contact_ids: null }
+        : { scheduled_at: iso, contact_ids: selectedContacts }
+      await api.post(`/campaigns/${selectedCampaign.id}/schedule`, payload)
       toast.success('Campaign scheduled!')
       fetchCampaigns(); setShowSendModal(false)
     } catch (err) { toast.error(err.response?.data?.detail || 'Failed to schedule') }
@@ -1015,7 +1018,10 @@ function WhatsappCampaigns() {
     setSending(true)
     try {
       const iso = new Date(scheduleAt).toISOString()
-      await api.post(`/whatsapp-campaigns/${selectedCampaign.id}/schedule`, { scheduled_at: iso })
+      const payload = sendToAll
+        ? { scheduled_at: iso, contact_ids: null }
+        : { scheduled_at: iso, contact_ids: selectedContacts }
+      await api.post(`/whatsapp-campaigns/${selectedCampaign.id}/schedule`, payload)
       toast.success('WhatsApp campaign scheduled!')
       fetchCampaigns(); setShowSendModal(false)
     } catch (err) { toast.error(err.response?.data?.detail || 'Failed to schedule') }

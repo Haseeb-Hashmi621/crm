@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import uuid
 from twilio.rest import Client
 
+
 def format_phone_e164(phone: str, default_country_code: str = "92") -> str:
     cleaned = ''.join(filter(str.isdigit, phone))
     if cleaned.startswith('92') and len(cleaned) == 12:
@@ -16,6 +17,7 @@ def format_phone_e164(phone: str, default_country_code: str = "92") -> str:
     if len(cleaned) >= 11:
         return f"+{cleaned}"
     return f"+{cleaned}"
+
 
 def get_twilio_client():
     return Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
@@ -59,14 +61,20 @@ def delete_sms_campaign(db: Session, campaign_id: str, user_id: uuid.UUID) -> bo
 # ── Scheduling (Priority 5) ───────────────────────────────────────────────────
 
 def schedule_sms_campaign(
-    db: Session, campaign_id: str, user_id: uuid.UUID, scheduled_at: datetime
+    db: Session,
+    campaign_id: str,
+    user_id: uuid.UUID,
+    scheduled_at: datetime,
+    contact_ids: Optional[List[uuid.UUID]] = None,
 ) -> dict:
     campaign = get_sms_campaign(db, campaign_id, user_id)
     if not campaign:
         return {"error": "Campaign not found"}
 
     if campaign.status not in ("draft", "scheduled", "failed"):
-        return {"error": f"Cannot schedule a campaign with status '{campaign.status}'"}
+        return {
+            "error": f"Cannot schedule a campaign with status '{campaign.status}'"
+        }
 
     if scheduled_at.tzinfo is None:
         scheduled_at = scheduled_at.replace(tzinfo=timezone.utc)
@@ -76,9 +84,14 @@ def schedule_sms_campaign(
 
     campaign.status = "scheduled"
     campaign.scheduled_at = scheduled_at
+    campaign.scheduled_contact_ids = (
+        [str(cid) for cid in contact_ids] if contact_ids else None
+    )
     campaign.schedule_failed_reason = None
+
     db.commit()
     db.refresh(campaign)
+
     return {"campaign": campaign}
 
 
@@ -88,13 +101,18 @@ def cancel_sms_schedule(db: Session, campaign_id: str, user_id: uuid.UUID) -> di
         return {"error": "Campaign not found"}
 
     if campaign.status != "scheduled":
-        return {"error": f"Campaign is not scheduled (status: '{campaign.status}')"}
+        return {
+            "error": f"Campaign is not scheduled (status: '{campaign.status}')"
+        }
 
     campaign.status = "draft"
     campaign.scheduled_at = None
+    campaign.scheduled_contact_ids = None
     campaign.schedule_failed_reason = None
+
     db.commit()
     db.refresh(campaign)
+
     return {"campaign": campaign}
 
 
@@ -172,7 +190,9 @@ def send_sms_campaign(
     campaign.sent_count = sent_count
     campaign.sent_at = datetime.now(timezone.utc)
     campaign.scheduled_at = None
+    campaign.scheduled_contact_ids = None
     campaign.schedule_failed_reason = None
+
     db.commit()
 
     return {
@@ -187,6 +207,7 @@ def get_sms_recipients(db: Session, campaign_id: str, user_id: uuid.UUID):
     campaign = get_sms_campaign(db, campaign_id, user_id)
     if not campaign:
         return []
+
     return db.query(SmsCampaignRecipient).filter(
         SmsCampaignRecipient.campaign_id == campaign_id
     ).all()
