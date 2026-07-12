@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Users, TrendingUp, DollarSign, Activity, MessageSquare, PhoneCall, Send, Calendar, Phone, MessageCircle, CheckSquare, AlertCircle, Clock, Package, FileText, Receipt, Frown } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import api from '../services/api'
-
+import ZahraChatWidget from '../components/ZahraChatWidget'
 const ACTIVITY_TYPE_CONFIG = {
   note:     { icon: MessageSquare, color: 'text-violet-400',  bg: 'bg-violet-500/10',  label: 'Note' },
   call:     { icon: PhoneCall,     color: 'text-green-400',   bg: 'bg-green-500/10',   label: 'Call' },
@@ -442,7 +442,7 @@ export default function DashboardHome() {
 
         {/* At-Risk Contacts Widget — Feature #51 */}
         <AtRiskContactsWidget />
-
+        <ZahraChatWidget />
       </motion.div>
     </div>
   )

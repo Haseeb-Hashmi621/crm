@@ -117,7 +117,7 @@ export default function Dashboard() {
         <Outlet />
       </div>
 
-      <ZahraChatWidget />
+      
     </div>
   )
 }
