@@ -49,7 +49,7 @@ export default function Signup() {
             type="text"
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
-            placeholder="Haseeb Hashmi"
+            placeholder="Your Name"
             required
             autoComplete="name"
           />
@@ -61,7 +61,7 @@ export default function Signup() {
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com"
+            placeholder="your@email.com"
             required
             autoComplete="email"
           />
