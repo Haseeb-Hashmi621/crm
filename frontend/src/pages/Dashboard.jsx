@@ -11,6 +11,7 @@ import useAuthStore from '../store/authStore'
 import { useNavigate, useLocation, Outlet } from 'react-router-dom'
 import GlobalSearch from '../components/GlobalSearch'
 import NotificationBell from '../components/NotificationBell'
+import ZahraChatWidget from '../components/ZahraChatWidget'
 import api from '../services/api'
 
 const baseNavItems = [
@@ -115,6 +116,8 @@ export default function Dashboard() {
       <div style={{ marginLeft: '256px', flex: 1, minWidth: 0 }}>
         <Outlet />
       </div>
+
+      <ZahraChatWidget />
     </div>
   )
 }

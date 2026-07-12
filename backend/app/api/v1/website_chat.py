@@ -3,9 +3,9 @@ backend/app/api/v1/website_chat.py
 
 Public (no-auth) endpoint for the Zahra website widget. Anonymous
 visitors chat here; when they drop a phone/email, we auto-create a
-CRM Contact (owned by the admin account, WIDGET_OWNER_EMAIL below)
-and log the exchange as an Activity, same pattern as form_service.py
-uses for public form submissions.
+CRM Contact (owned by an admin account) and log the exchange as an
+Activity, same pattern as form_service.py uses for public form
+submissions.
 """
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -20,9 +20,10 @@ from app.services.website_chat_service import generate_reply, detect_contact
 
 router = APIRouter()
 
-# The CRM user account that "owns" website-chat leads. Change this to the
-# actual admin email for the account that should receive these contacts.
-WIDGET_OWNER_EMAIL = "admin@setupinpakistan.com"
+# Optional override — if you want leads to always land under one specific
+# account, set this to that account's email. Leave as None to auto-fallback
+# to the first admin user in the system (works out of the box on localhost).
+WIDGET_OWNER_EMAIL: Optional[str] = None
 
 
 class ChatMessage(BaseModel):
@@ -42,7 +43,23 @@ class ChatResponse(BaseModel):
 
 
 def _get_widget_owner(db: Session) -> Optional[User]:
-    return db.query(User).filter(User.email == WIDGET_OWNER_EMAIL).first()
+    """Resolve which CRM user account should own leads captured by the widget.
+
+    Priority:
+      1. WIDGET_OWNER_EMAIL if explicitly set and that user exists
+      2. First admin user in the system
+      3. First user in the system (last resort)
+    """
+    if WIDGET_OWNER_EMAIL:
+        user = db.query(User).filter(User.email == WIDGET_OWNER_EMAIL).first()
+        if user:
+            return user
+
+    admin = db.query(User).filter(User.role == "admin").order_by(User.created_at.asc()).first()
+    if admin:
+        return admin
+
+    return db.query(User).order_by(User.created_at.asc()).first()
 
 
 def _capture_lead_if_present(db: Session, owner: User, session_id: Optional[str], last_user_message: str) -> bool:
