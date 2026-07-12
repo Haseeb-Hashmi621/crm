@@ -28,6 +28,7 @@ from app.api.v1.calendar import router as calendar_router
 from app.api.v1.chatbot import router as chatbot_router
 from app.api.v1.knowledge_base import router as knowledge_base_router
 from app.services.scheduler_service import start_scheduler, stop_scheduler
+from app.api.v1.website_chat import router as website_chat_router
 
 app = FastAPI(
     title="CRM API",
@@ -76,7 +77,7 @@ app.include_router(forms_router, prefix="/forms", tags=["Forms"])
 app.include_router(calendar_router, prefix="/calendar", tags=["Calendar"])
 app.include_router(chatbot_router, prefix="/chatbot", tags=["Chatbot"])
 app.include_router(knowledge_base_router, prefix="/knowledge-base", tags=["Knowledge Base"])
-
+app.include_router(website_chat_router, prefix="/website-chat", tags=["Website Chat"])
 
 @app.on_event("startup")
 def _on_startup():
