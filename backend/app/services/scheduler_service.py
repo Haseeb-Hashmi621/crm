@@ -3,30 +3,6 @@ backend/app/services/scheduler_service.py
 
 Priority 5 — Campaign / Message Scheduling.
 
-CHANGELOG (this revision):
-- Fixed: a DNS/connection blip on ANY one channel (email/SMS/WhatsApp) used to
-  abort the ENTIRE tick, delaying the other two channels by a full extra
-  interval. Each channel now runs in its own try/except so one failing
-  channel never blocks the others.
-- Fixed: scheduled sends always ignored the user's "select specific contacts"
-  choice and sent to ALL contacts. The scheduler now reads
-  campaign.scheduled_contact_ids (populated by the /schedule endpoints) and
-  passes it through to the same send_* functions the "Send Now" path uses.
-- Reduced poll interval 60s -> 20s to tighten worst-case scheduling latency.
-
-Design: no existing job-queue infrastructure exists in this codebase (no Celery,
-no Redis), so this uses APScheduler's BackgroundScheduler with a simple polling
-job that runs every POLL_INTERVAL_SECONDS inside the same FastAPI process. It
-looks across all three campaign tables (email, SMS, WhatsApp) for rows with
-status == 'scheduled' and scheduled_at <= now, and fires the existing send_*
-functions for each — the exact same send path a user triggers manually from
-the UI, so there is only one code path per channel to maintain.
-
-Failures are caught per-campaign so one bad campaign can't block others in the
-same tick, and the failure reason is persisted on the row (schedule_failed_reason)
-so the UI can surface it instead of a campaign silently vanishing into "sent"
-with zero recipients.
-
 Started from app.main on FastAPI startup, shut down cleanly on FastAPI shutdown.
 """
 from datetime import datetime, timezone
@@ -162,6 +138,14 @@ def _process_due_whatsapp_campaigns(db) -> None:
             logger.error(f"Scheduled WhatsApp campaign {campaign.id} raised: {e}")
 
 
+def _process_due_email_sequences(db) -> None:
+    from app.services.email_sequence_service import process_due_enrollments
+
+    result = process_due_enrollments(db)
+    if result["processed"] > 0:
+        logger.info(f"Email sequences tick: {result}")
+
+
 def _poll_tick() -> None:
     """One scheduler tick — checks all three channels for due campaigns.
 
@@ -190,6 +174,12 @@ def _poll_tick() -> None:
         except Exception as e:
             db.rollback()
             logger.error(f"WhatsApp channel tick failed (isolated, others unaffected): {e}")
+
+        try:
+            _process_due_email_sequences(db)
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Email sequence channel tick failed (isolated, others unaffected): {e}")
     finally:
         db.close()
 

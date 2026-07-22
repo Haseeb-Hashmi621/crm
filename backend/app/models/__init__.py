@@ -19,3 +19,4 @@ from .invoice import Invoice, InvoiceLineItem
 from .calendar_event import CalendarEvent
 from .chatbot import ChatbotConfig, KnowledgeBaseEntry
 from .workflow import WorkflowRule, WorkflowRunLog
+from .email_sequence import EmailSequence, EmailSequenceStep, SequenceEnrollment, SequenceStepSend

@@ -81,6 +81,13 @@ ACTION_TYPES = [
             {"key": "body", "label": "Body", "type": "textarea"},
         ],
     },
+    {
+        "id": "enroll_in_sequence", "label": "Enroll in Email Sequence",
+        "description": "Enrolls the triggering contact into a drip email sequence.",
+        "config_fields": [
+            {"key": "sequence_id", "label": "Sequence ID", "type": "text"},
+        ],
+    },
 ]
 
 
@@ -225,11 +232,31 @@ def _exec_send_email(db: Session, user_id: uuid.UUID, config: dict, contact: Opt
         return {"type": "send_email", "success": False, "detail": str(e)[:200]}
 
 
+def _exec_enroll_in_sequence(db: Session, user_id: uuid.UUID, config: dict, contact: Optional[Contact]) -> dict:
+    if not contact:
+        return {"type": "enroll_in_sequence", "success": False, "detail": "No contact in trigger context"}
+    if not contact.email:
+        return {"type": "enroll_in_sequence", "success": False, "detail": "Contact has no email"}
+
+    sequence_id = (config.get("sequence_id") or "").strip()
+    if not sequence_id:
+        return {"type": "enroll_in_sequence", "success": False, "detail": "No sequence configured"}
+
+    from app.services.email_sequence_service import enroll_contacts
+    result = enroll_contacts(db, sequence_id, user_id, [contact.id])
+    if "error" in result:
+        return {"type": "enroll_in_sequence", "success": False, "detail": result["error"]}
+    if result["enrolled"] == 0:
+        return {"type": "enroll_in_sequence", "success": False, "detail": result["skipped_reasons"][0] if result["skipped_reasons"] else "Already enrolled"}
+    return {"type": "enroll_in_sequence", "success": True, "detail": "Enrolled in sequence"}
+
+
 ACTION_EXECUTORS = {
     "create_task": _exec_create_task,
     "add_tag": _exec_add_tag,
     "send_notification": _exec_send_notification,
     "send_email": _exec_send_email,
+    "enroll_in_sequence": _exec_enroll_in_sequence,
 }
 
 
