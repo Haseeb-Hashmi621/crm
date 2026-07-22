@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 from app.models.tag import Tag
 from app.models.contact import Contact
 from app.schemas.tag import TagCreate
+from app.services import workflow_service
 from typing import List, Optional
 from uuid import UUID
 
@@ -11,7 +12,6 @@ def get_tags(db: Session, user_id: UUID) -> List[Tag]:
 
 
 def create_tag(db: Session, tag_data: TagCreate, user_id: UUID) -> Tag:
-    # Check for duplicate name for this user
     existing = db.query(Tag).filter(
         Tag.name == tag_data.name,
         Tag.user_id == user_id
@@ -43,6 +43,10 @@ def add_tag_to_contact(db: Session, contact_id: UUID, tag_id: UUID) -> Optional[
         contact.tags.append(tag)
         db.commit()
         db.refresh(contact)
+        workflow_service.trigger_event(
+            db, contact.user_id, "tag_added",
+            {"contact": contact, "tag_name": tag.name, "summary": f"Tag '{tag.name}' added to {contact.first_name}"}
+        )
     return contact
 
 

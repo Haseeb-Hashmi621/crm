@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.models.contact import Contact
 from app.schemas.contact import ContactCreate, ContactUpdate
 from app.services.notification_service import create_notification
+from app.services import workflow_service
 from typing import List, Optional
 
 def get_contacts(db: Session, skip: int = 0, limit: int = 100, user_id: str = None) -> List[Contact]:
@@ -36,6 +37,11 @@ def create_contact(db: Session, contact_data: ContactCreate, user_id: str) -> Co
         title="New contact added",
         message=f"{full_name} was added to your contacts",
         link=f"/dashboard/contacts/{db_contact.id}"
+    )
+
+    workflow_service.trigger_event(
+        db, user_id, "contact_created",
+        {"contact": db_contact, "summary": f"Contact {full_name or db_contact.email} created"}
     )
 
     return db_contact

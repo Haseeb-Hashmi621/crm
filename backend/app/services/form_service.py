@@ -3,6 +3,7 @@ from sqlalchemy import func
 from app.models.form import Form, FormSubmission
 from app.schemas.form import FormCreate, FormUpdate, FormSubmissionCreate
 from app.models.contact import Contact
+from app.services import workflow_service
 from datetime import datetime
 
 
@@ -43,23 +44,37 @@ def get_forms(db: Session, user_id) -> list[dict]:
 
 
 def get_form(db: Session, form_id: int, user_id) -> Form | None:
-    return db.query(Form).filter(Form.id == form_id, Form.user_id == user_id).first()
+    return db.query(Form).filter(
+        Form.id == form_id,
+        Form.user_id == user_id
+    ).first()
 
 
 def get_form_public(db: Session, form_id: int) -> Form | None:
-    return db.query(Form).filter(Form.id == form_id, Form.is_active == True).first()
+    return db.query(Form).filter(
+        Form.id == form_id,
+        Form.is_active == True
+    ).first()
 
 
 def update_form(db: Session, form_id: int, user_id, data: FormUpdate) -> Form | None:
     form = get_form(db, form_id, user_id)
     if not form:
         return None
+
     update_data = data.model_dump(exclude_unset=True)
+
     if "fields" in update_data and update_data["fields"] is not None:
-        update_data["fields"] = [f if isinstance(f, dict) else f.model_dump() for f in data.fields]
+        update_data["fields"] = [
+            f if isinstance(f, dict) else f.model_dump()
+            for f in data.fields
+        ]
+
     for key, value in update_data.items():
         setattr(form, key, value)
+
     form.updated_at = datetime.utcnow()
+
     db.commit()
     db.refresh(form)
     return form
@@ -69,6 +84,7 @@ def delete_form(db: Session, form_id: int, user_id) -> bool:
     form = get_form(db, form_id, user_id)
     if not form:
         return False
+
     db.delete(form)
     db.commit()
     return True
@@ -100,9 +116,15 @@ def submit_form(db: Session, form_id: int, data: FormSubmissionCreate, ip: str |
 
         if field_type == "email" or "email" in label_lower:
             email = value
+
         if "name" in label_lower and field_type == "text":
             name = value
-        if field_type == "phone" or "phone" in label_lower or "mobile" in label_lower:
+
+        if (
+            field_type == "phone"
+            or "phone" in label_lower
+            or "mobile" in label_lower
+        ):
             phone = value
 
     if email:
@@ -113,6 +135,7 @@ def submit_form(db: Session, form_id: int, data: FormSubmissionCreate, ip: str |
 
         if not existing:
             parts = (name or "").strip().split(" ", 1)
+
             contact = Contact(
                 user_id=form.user_id,
                 first_name=parts[0] or "Form",
@@ -123,16 +146,39 @@ def submit_form(db: Session, form_id: int, data: FormSubmissionCreate, ip: str |
                 source="form",
                 notes=f"Auto-created from form: {form.name}",
             )
+
             db.add(contact)
             db.flush()
+
             submission.contact_created = True
             submission.contact_id = contact.id
+
             contact_created = True
             contact_id = str(contact.id)
+
         else:
             submission.contact_id = existing.id
+            contact_id = str(existing.id)
 
     db.commit()
+
+    submitted_contact = None
+    if contact_id:
+        submitted_contact = db.query(Contact).filter(
+            Contact.id == contact_id
+        ).first()
+
+    workflow_service.trigger_event(
+        db,
+        form.user_id,
+        "form_submitted",
+        {
+            "contact": submitted_contact,
+            "form_id": str(form_id),
+            "summary": f"Form '{form.name}' submitted",
+        },
+    )
+
     return {
         "success": True,
         "message": form.success_message,
@@ -145,6 +191,10 @@ def get_submissions(db: Session, form_id: int, user_id) -> list[FormSubmission]:
     form = get_form(db, form_id, user_id)
     if not form:
         return []
-    return db.query(FormSubmission).filter(
-        FormSubmission.form_id == form_id
-    ).order_by(FormSubmission.created_at.desc()).all()
+
+    return (
+        db.query(FormSubmission)
+        .filter(FormSubmission.form_id == form_id)
+        .order_by(FormSubmission.created_at.desc())
+        .all()
+    )

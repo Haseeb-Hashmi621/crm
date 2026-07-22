@@ -18,3 +18,4 @@ from .quote import Quote, QuoteLineItem
 from .invoice import Invoice, InvoiceLineItem
 from .calendar_event import CalendarEvent
 from .chatbot import ChatbotConfig, KnowledgeBaseEntry
+from .workflow import WorkflowRule, WorkflowRunLog

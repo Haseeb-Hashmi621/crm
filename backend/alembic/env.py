@@ -20,6 +20,7 @@ from app.models.deal_stage_history import DealStageHistory
 from app.models.form import Form, FormSubmission
 from app.models.calendar_event import CalendarEvent
 from app.models.chatbot import ChatbotConfig, KnowledgeBaseEntry
+from app.models.workflow import WorkflowRule, WorkflowRunLog
 
 config = context.config
 

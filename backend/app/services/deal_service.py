@@ -5,6 +5,7 @@ from app.models.task import Task
 from app.models.deal_stage_history import DealStageHistory
 from app.schemas.deal import DealCreate, DealUpdate
 from app.services.notification_service import create_notification
+from app.services import workflow_service
 from typing import List, Optional
 from datetime import datetime, timezone, timedelta
 import uuid
@@ -32,7 +33,6 @@ def get_deal(db: Session, deal_id: str, user_id: uuid.UUID) -> Optional[Deal]:
 
 
 def _log_stage_change(db: Session, deal_id, user_id, from_stage: Optional[str], to_stage: str):
-    """Record a stage transition. Called on creation (from_stage=None) and every change."""
     history = DealStageHistory(
         deal_id=deal_id,
         user_id=user_id,
@@ -44,11 +44,12 @@ def _log_stage_change(db: Session, deal_id, user_id, from_stage: Optional[str], 
 
 def create_deal(db: Session, deal_data: DealCreate, user_id: uuid.UUID) -> Deal:
     contact_name = deal_data.contact_name
+    linked_contact = None
 
     if deal_data.contact_id:
-        contact = db.query(Contact).filter(Contact.id == deal_data.contact_id).first()
-        if contact:
-            contact_name = f"{contact.first_name or ''} {contact.last_name or ''}".strip()
+        linked_contact = db.query(Contact).filter(Contact.id == deal_data.contact_id).first()
+        if linked_contact:
+            contact_name = f"{linked_contact.first_name or ''} {linked_contact.last_name or ''}".strip()
 
     db_deal = Deal(
         title=deal_data.title,
@@ -61,7 +62,7 @@ def create_deal(db: Session, deal_data: DealCreate, user_id: uuid.UUID) -> Deal:
         user_id=user_id
     )
     db.add(db_deal)
-    db.flush()  # get db_deal.id before commit
+    db.flush()
 
     _log_stage_change(db, db_deal.id, user_id, None, db_deal.stage or "new")
 
@@ -74,6 +75,11 @@ def create_deal(db: Session, deal_data: DealCreate, user_id: uuid.UUID) -> Deal:
         title="New deal created",
         message=f'"{db_deal.title}" added to pipeline',
         link=f"/dashboard/deals/{db_deal.id}"
+    )
+
+    workflow_service.trigger_event(
+        db, user_id, "deal_created",
+        {"contact": linked_contact, "summary": f'Deal "{db_deal.title}" created'}
     )
 
     return db_deal
@@ -101,11 +107,9 @@ def update_deal(db: Session, deal_id: str, deal_data: DealUpdate, user_id: uuid.
     db.refresh(deal)
 
     if deal_data.stage and deal_data.stage != old_stage:
-        # Log the transition for velocity analytics
         _log_stage_change(db, deal.id, user_id, old_stage, deal_data.stage)
         db.commit()
 
-        # Notification
         create_notification(
             db, user_id,
             type="deal_updated",
@@ -113,8 +117,7 @@ def update_deal(db: Session, deal_id: str, deal_data: DealUpdate, user_id: uuid.
             message=f'"{deal.title}" moved to {STAGES_LABELS.get(deal.stage, deal.stage)}',
             link=f"/dashboard/deals/{deal.id}"
         )
-        # Dispatch instant refresh (backend side — frontend dispatches window event)
-        # Auto-create task for key stage transitions
+
         if deal_data.stage in STAGE_AUTO_TASKS:
             task_title, task_type, priority, days_ahead = STAGE_AUTO_TASKS[deal_data.stage]
             auto_task = Task(
@@ -129,6 +132,13 @@ def update_deal(db: Session, deal_id: str, deal_data: DealUpdate, user_id: uuid.
             )
             db.add(auto_task)
             db.commit()
+
+        deal_contact = db.query(Contact).filter(Contact.id == deal.contact_id).first() if deal.contact_id else None
+        workflow_service.trigger_event(
+            db, user_id, "deal_stage_changed",
+            {"contact": deal_contact, "stage": deal_data.stage,
+             "summary": f'Deal "{deal.title}" moved to {STAGES_LABELS.get(deal_data.stage, deal_data.stage)}'}
+        )
 
     return deal
 

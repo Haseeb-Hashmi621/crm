@@ -27,6 +27,7 @@ import Invoices from './pages/Invoices'
 import Forms from './pages/Forms'
 import CalendarPage from './pages/Calendar'
 import ChatbotSettings from './pages/ChatbotSettings'
+import WorkflowAutomation from './pages/WorkflowAutomation'
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated } = useAuthStore()
@@ -71,6 +72,7 @@ function App() {
           <Route path="forms" element={<Forms />} />
           <Route path="calendar" element={<CalendarPage />} />
           <Route path="chatbot" element={<ChatbotSettings />} />
+          <Route path="workflows" element={<WorkflowAutomation />} />
         </Route>
         <Route path="/" element={<Navigate to="/login" />} />
       </Routes>

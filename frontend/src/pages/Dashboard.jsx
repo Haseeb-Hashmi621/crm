@@ -5,7 +5,7 @@ import {
   Users, TrendingUp, DollarSign, Activity, LogOut,
   Settings, Mail, Filter, FileText, Inbox,
   MessageCircle, CheckSquare, Shield, BarChart3,
-  Package, Receipt, CalendarDays, Bot
+  Package, Receipt, CalendarDays, Bot, Zap
 } from 'lucide-react'
 import useAuthStore from '../store/authStore'
 import { useNavigate, useLocation, Outlet } from 'react-router-dom'
@@ -24,6 +24,7 @@ const baseNavItems = [
   { label: 'Analytics',     icon: BarChart3,     path: '/dashboard/analytics' },
   { label: 'Campaigns',     icon: Mail,          path: '/dashboard/campaigns' },
   { label: 'Segments',      icon: Filter,        path: '/dashboard/segments' },
+  { label: 'Automation',    icon: Zap,           path: '/dashboard/workflows' },
   { label: 'Templates',     icon: FileText,      path: '/dashboard/templates' },
   { label: 'Inbox',         icon: Inbox,         path: '/dashboard/inbox' },
   { label: 'Mail',          icon: Mail,          path: '/dashboard/mail' },
