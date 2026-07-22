@@ -29,6 +29,7 @@ import CalendarPage from './pages/Calendar'
 import ChatbotSettings from './pages/ChatbotSettings'
 import WorkflowAutomation from './pages/WorkflowAutomation'
 import AdminRoute from './components/AdminRoute'
+import EmailSequences from './pages/EmailSequences'
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated } = useAuthStore()
@@ -74,6 +75,7 @@ function App() {
           <Route path="calendar" element={<CalendarPage />} />
           <Route path="chatbot" element={<AdminRoute><ChatbotSettings /></AdminRoute>} />
           <Route path="workflows" element={<WorkflowAutomation />} />
+          <Route path="sequences" element={<EmailSequences />} />
         </Route>
         <Route path="/" element={<Navigate to="/login" />} />
       </Routes>
