@@ -5,7 +5,7 @@ import {
   ArrowLeft, Mail, Phone, Building2, Calendar,
   MessageSquare, PhoneCall, Send, Users,
   Plus, Trash2, Loader2, Edit2, X, Check, MessageCircle,
-  CheckSquare, Clock, AlertCircle, Bot
+  CheckSquare, Clock, AlertCircle, Bot, Sparkles
 } from 'lucide-react'
 import api from '../services/api'
 import toast from 'react-hot-toast'
@@ -22,6 +22,25 @@ const ACTIVITY_TYPES = [
 
 // Only these 4 are available in the Log Activity composer
 const LOG_TYPES = ACTIVITY_TYPES.filter(t => ['note', 'call', 'email', 'meeting'].includes(t.id))
+
+// Sentiment Analysis (Feature #51) — same visual language as Conversations.jsx
+// so a "negative" badge reads identically whether you're looking at the
+// unified inbox or a single contact's timeline.
+const SENTIMENT_CONFIG = {
+  positive: { label: 'Positive', color: 'text-green-400', bg: 'bg-green-500/10', border: 'border-green-500/30' },
+  neutral:  { label: 'Neutral',  color: 'text-gray-400',  bg: 'bg-gray-500/10',  border: 'border-gray-500/30' },
+  negative: { label: 'Negative', color: 'text-red-400',   bg: 'bg-red-500/10',   border: 'border-red-500/30' },
+}
+
+function SentimentBadge({ sentiment }) {
+  if (!sentiment) return null
+  const cfg = SENTIMENT_CONFIG[sentiment] || SENTIMENT_CONFIG.neutral
+  return (
+    <span className={`text-[9px] px-1.5 py-0.5 rounded-full border ${cfg.bg} ${cfg.color} ${cfg.border} font-medium`}>
+      {cfg.label}
+    </span>
+  )
+}
 
 function TimeAgo({ dateString }) {
   const date = new Date(dateString)
@@ -172,6 +191,10 @@ export default function ContactDetail() {
   const [content, setContent] = useState('')
   const [posting, setPosting] = useState(false)
 
+  // Sentiment Analysis (Feature #51) — tracks which activity's on-demand
+  // analysis is currently in flight, so only that row shows a spinner
+  const [analyzingSentiment, setAnalyzingSentiment] = useState(null)
+
   // Edit contact inline
   const [editing, setEditing] = useState(false)
   const [editForm, setEditForm] = useState({})
@@ -239,6 +262,27 @@ export default function ContactDetail() {
       toast.success('Deleted')
     } catch (err) {
       toast.error('Failed to delete')
+    }
+  }
+
+  // Sentiment Analysis (Feature #51) — on-demand analysis for activities
+  // that weren't auto-analyzed (only inbound webhook messages are).
+  // Updates the activity in place so the badge appears without a refetch.
+  const handleAnalyzeSentiment = async (activityId) => {
+    setAnalyzingSentiment(activityId)
+    try {
+      const res = await api.post(`/activities/${activityId}/analyze-sentiment`)
+      setActivities(prev => prev.map(a => a.id === activityId ? {
+        ...a,
+        sentiment: res.data.sentiment,
+        sentiment_score: res.data.sentiment_score,
+        sentiment_analyzed_at: res.data.sentiment_analyzed_at,
+      } : a))
+      toast.success('Sentiment analyzed')
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to analyze sentiment')
+    } finally {
+      setAnalyzingSentiment(null)
     }
   }
 
@@ -554,21 +598,37 @@ export default function ContactDetail() {
                             {/* Content */}
                             <div className="flex-1 min-w-0 pb-2">
                               <div className="flex items-start justify-between gap-2">
-                                <div className="flex items-center gap-2 mb-1">
+                                <div className="flex items-center gap-2 mb-1 flex-wrap">
                                   <span className={`text-xs font-semibold uppercase tracking-wide ${typeInfo.color}`}>
                                     {isInbound ? `↙ ${typeInfo.label}` : typeInfo.label}
                                   </span>
+                                  <SentimentBadge sentiment={activity.sentiment} />
                                   <span className="text-gray-600 text-xs">
                                     <TimeAgo dateString={activity.created_at} />
                                   </span>
                                 </div>
-                                <motion.button
-                                  whileHover={{ scale: 1.1 }}
-                                  onClick={() => handleDeleteActivity(activity.id)}
-                                  className="opacity-0 group-hover:opacity-100 text-gray-600 hover:text-red-400 transition-all flex-shrink-0 mt-0.5"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </motion.button>
+                                <div className="flex items-center gap-1 flex-shrink-0 mt-0.5">
+                                  {!activity.sentiment && (
+                                    <motion.button
+                                      whileHover={{ scale: 1.1 }}
+                                      onClick={() => handleAnalyzeSentiment(activity.id)}
+                                      disabled={analyzingSentiment === activity.id}
+                                      title="Analyze sentiment"
+                                      className="opacity-0 group-hover:opacity-100 text-gray-600 hover:text-violet-400 transition-all disabled:opacity-50"
+                                    >
+                                      {analyzingSentiment === activity.id
+                                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                        : <Sparkles className="w-3.5 h-3.5" />}
+                                    </motion.button>
+                                  )}
+                                  <motion.button
+                                    whileHover={{ scale: 1.1 }}
+                                    onClick={() => handleDeleteActivity(activity.id)}
+                                    className="opacity-0 group-hover:opacity-100 text-gray-600 hover:text-red-400 transition-all"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </motion.button>
+                                </div>
                               </div>
                               <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-wrap">
                                 {displayContent}
