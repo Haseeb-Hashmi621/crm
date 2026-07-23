@@ -30,6 +30,8 @@ import ChatbotSettings from './pages/ChatbotSettings'
 import WorkflowAutomation from './pages/WorkflowAutomation'
 import AdminRoute from './components/AdminRoute'
 import EmailSequences from './pages/EmailSequences'
+import MeetingScheduler from './pages/MeetingScheduler'
+import PublicBooking from './pages/PublicBooking'
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated } = useAuthStore()
@@ -51,6 +53,7 @@ function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
+        <Route path="/book/:userId" element={<PublicBooking />} />
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>}>
           <Route index element={<DashboardHome />} />
           <Route path="contacts" element={<Contacts />} />
@@ -76,6 +79,7 @@ function App() {
           <Route path="chatbot" element={<AdminRoute><ChatbotSettings /></AdminRoute>} />
           <Route path="workflows" element={<WorkflowAutomation />} />
           <Route path="sequences" element={<EmailSequences />} />
+          <Route path="scheduler" element={<MeetingScheduler />} />
         </Route>
         <Route path="/" element={<Navigate to="/login" />} />
       </Routes>

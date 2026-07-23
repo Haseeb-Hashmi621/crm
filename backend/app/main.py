@@ -31,6 +31,8 @@ from app.services.scheduler_service import start_scheduler, stop_scheduler
 from app.api.v1.website_chat import router as website_chat_router
 from app.api.v1.workflows import router as workflows_router
 from app.api.v1.email_sequences import router as email_sequences_router
+from app.api.v1.meeting_scheduler import router as meeting_scheduler_router
+from app.api.v1.public_booking import router as public_booking_router
 
 app = FastAPI(
     title="CRM API",
@@ -82,6 +84,8 @@ app.include_router(knowledge_base_router, prefix="/knowledge-base", tags=["Knowl
 app.include_router(website_chat_router, prefix="/website-chat", tags=["Website Chat"])
 app.include_router(workflows_router, prefix="/workflows", tags=["Workflows"])
 app.include_router(email_sequences_router, prefix="/email-sequences", tags=["Email Sequences"])
+app.include_router(meeting_scheduler_router, prefix="/scheduler", tags=["Meeting Scheduler"])
+app.include_router(public_booking_router, prefix="/booking", tags=["Public Booking"])
 
 @app.on_event("startup")
 def _on_startup():

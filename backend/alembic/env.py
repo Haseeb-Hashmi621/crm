@@ -22,6 +22,7 @@ from app.models.calendar_event import CalendarEvent
 from app.models.chatbot import ChatbotConfig, KnowledgeBaseEntry
 from app.models.workflow import WorkflowRule, WorkflowRunLog
 from app.models.email_sequence import EmailSequence, EmailSequenceStep, SequenceEnrollment, SequenceStepSend
+from app.models.meeting_scheduler import MeetingType, AvailabilitySchedule, AvailabilityOverride, Booking
 
 config = context.config
 
