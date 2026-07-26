@@ -20,10 +20,10 @@ from app.services.website_chat_service import generate_reply, detect_contact
 
 router = APIRouter()
 
-# Optional override — if you want leads to always land under one specific
-# account, set this to that account's email. Leave as None to auto-fallback
-# to the first admin user in the system (works out of the box on localhost).
-WIDGET_OWNER_EMAIL: Optional[str] = None
+# All leads captured by the public website chat widget are attached to this
+# account, so they always show up on this user's dashboard/Contacts/Inbox.
+# IMPORTANT: replace with your actual login email.
+WIDGET_OWNER_EMAIL: Optional[str] = "test3@example.com"
 
 
 class ChatMessage(BaseModel):
