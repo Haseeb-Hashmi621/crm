@@ -15,11 +15,17 @@ def get_activities_by_deal(db: Session, deal_id: str) -> List[Activity]:
         Activity.deal_id == deal_id
     ).order_by(Activity.created_at.desc()).all()
 
-def get_recent_activities(db: Session, limit: int = 50) -> List[Activity]:
-    """Single query — fetches recent activities across all contacts with contact info joined."""
+def get_recent_activities(db: Session, user_id, limit: int = 50) -> List[Activity]:
+    """Single query — fetches recent activities across all of THIS user's
+    contacts only, with contact info joined. Previously had no user scoping,
+    which leaked activities from contacts owned by other users (e.g. leads
+    captured by the public website chat widget under a different owner
+    account) into every user's dashboard feed."""
+    user_contact_ids = db.query(Contact.id).filter(Contact.user_id == user_id).subquery()
     return (
         db.query(Activity)
         .options(joinedload(Activity.contact))
+        .filter(Activity.contact_id.in_(user_contact_ids))
         .order_by(Activity.created_at.desc())
         .limit(limit)
         .all()
