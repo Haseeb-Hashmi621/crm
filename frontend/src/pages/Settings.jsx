@@ -1,10 +1,8 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { User, Mail, Lock, Save, Loader2, Check, Eye, EyeOff, Shield, Bell, Palette } from 'lucide-react'
+import { User, Mail, Lock, Save, Loader2, Check, Eye, EyeOff, Shield, Bell, Palette, Moon } from 'lucide-react'
 import api from '../services/api'
 import toast from 'react-hot-toast'
-import useThemeStore from '../store/themeStore'
-import { Sun, Moon, Monitor } from 'lucide-react'
 
 const TABS = [
   { id: 'profile', label: 'Profile', icon: User },
@@ -27,8 +25,6 @@ export default function Settings() {
   const [showCurrent, setShowCurrent] = useState(false)
   const [showNew, setShowNew] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
-
-  const { theme, setTheme } = useThemeStore()
 
   useEffect(() => {
     fetchMe()
@@ -92,12 +88,6 @@ export default function Settings() {
       setSavingPassword(false)
     }
   }
-
-  const themes = [
-    { id: 'light', icon: Sun, label: 'Light' },
-    { id: 'dark', icon: Moon, label: 'Dark' },
-    { id: 'system', icon: Monitor, label: 'System' },
-  ]
 
   const initials = user?.full_name
     ? user.full_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
@@ -209,26 +199,13 @@ export default function Settings() {
                   </div>
                 </div>
 
-                {/* Appearance */}
+                {/* Appearance — Dark only for now; Light/System removed until
+                    the app has real light-mode styles (see project notes) */}
                 <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6">
                   <h2 className="text-white font-semibold mb-1">Appearance</h2>
-                  <p className="text-gray-500 text-sm mb-4">Choose your preferred theme</p>
-                  <div className="flex gap-3">
-                    {themes.map(t => (
-                      <motion.button
-                        key={t.id}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => setTheme(t.id)}
-                        className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all border ${
-                          theme === t.id
-                            ? 'bg-violet-600 text-white border-violet-500'
-                            : 'bg-gray-800 text-gray-400 border-gray-700 hover:text-white hover:border-gray-600'
-                        }`}
-                      >
-                        <t.icon className="w-4 h-4" />
-                        {t.label}
-                      </motion.button>
-                    ))}
+                  <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border bg-violet-600 text-white border-violet-500 w-fit">
+                    <Moon className="w-4 h-4" />
+                    Dark
                   </div>
                 </div>
 
