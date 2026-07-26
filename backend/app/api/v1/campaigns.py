@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import Response
+from fastapi.responses import Response, RedirectResponse
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.deps import get_current_user
@@ -16,6 +16,7 @@ from app.services.campaign_service import (
 )
 from typing import List
 from datetime import datetime, timezone
+from urllib.parse import unquote
 import base64
 
 router = APIRouter()
@@ -41,7 +42,6 @@ async def track_open(
     if recipient and not recipient.opened:
         recipient.opened = True
         recipient.opened_at = datetime.now(timezone.utc)
-        # Increment campaign open_count
         campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
         if campaign:
             campaign.open_count = (campaign.open_count or 0) + 1
@@ -56,6 +56,37 @@ async def track_open(
             "Expires": "0",
         }
     )
+
+
+@router.get("/track/{campaign_id}/{recipient_id}/click")
+async def track_click(
+    campaign_id: str,
+    recipient_id: str,
+    url: str,
+    db: Session = Depends(get_db),
+):
+    """Click tracking redirect — logs the click (once per recipient) then
+    forwards the browser on to the real destination URL. Never blocks the
+    redirect on a tracking failure."""
+    try:
+        recipient = db.query(CampaignRecipient).filter(
+            CampaignRecipient.id == recipient_id,
+            CampaignRecipient.campaign_id == campaign_id,
+        ).first()
+
+        if recipient and not recipient.clicked:
+            recipient.clicked = True
+            campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+            if campaign:
+                campaign.click_count = (campaign.click_count or 0) + 1
+            db.commit()
+    except Exception:
+        db.rollback()
+
+    target = unquote(url)
+    if not target.startswith(("http://", "https://")):
+        target = "https://" + target
+    return RedirectResponse(url=target, status_code=302)
 
 
 @router.get("/", response_model=List[CampaignResponse])

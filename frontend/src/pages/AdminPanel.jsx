@@ -9,7 +9,9 @@ import toast from 'react-hot-toast'
 
 const ROLE_CONFIG = {
   admin:    { label: 'Admin',    color: 'text-violet-400', bg: 'bg-violet-500/10', border: 'border-violet-500/30', icon: Crown },
-  employee: { label: 'Employee', color: 'text-blue-400',   bg: 'bg-blue-500/10',   border: 'border-blue-500/30',   icon: User  },
+  manager:  { label: 'Manager',  color: 'text-blue-400',   bg: 'bg-blue-500/10',   border: 'border-blue-500/30',   icon: Shield },
+  agent:    { label: 'Agent',    color: 'text-teal-400',   bg: 'bg-teal-500/10',   border: 'border-teal-500/30',   icon: User },
+  employee: { label: 'Employee', color: 'text-gray-400',   bg: 'bg-gray-500/10',   border: 'border-gray-500/30',   icon: User },
 }
 
 function TimeAgo({ dateStr }) {
@@ -76,12 +78,12 @@ function UserModal({ user, onSave, onClose }) {
           </div>
           <div>
             <label className="text-sm font-medium text-gray-300 mb-2 block">Role</label>
-            <div className="flex gap-3">
+            <div className="grid grid-cols-2 gap-2">
               {Object.entries(ROLE_CONFIG).map(([roleId, cfg]) => {
                 const Icon = cfg.icon
                 return (
                   <button key={roleId} onClick={() => setForm({ ...form, role: roleId })}
-                    className={`flex-1 flex items-center gap-2 justify-center px-4 py-3 rounded-xl text-sm font-medium border transition-all ${
+                    className={`flex items-center gap-2 justify-center px-3 py-2.5 rounded-xl text-sm font-medium border transition-all ${
                       form.role === roleId
                         ? `${cfg.bg} ${cfg.color} ${cfg.border}`
                         : 'bg-gray-800 text-gray-500 border-gray-700 hover:text-gray-300'
@@ -179,6 +181,8 @@ export default function AdminPanel() {
   }
 
   const adminCount = users.filter(u => u.role === 'admin').length
+  const managerCount = users.filter(u => u.role === 'manager').length
+  const agentCount = users.filter(u => u.role === 'agent').length
   const employeeCount = users.filter(u => u.role === 'employee').length
 
   return (
@@ -202,11 +206,13 @@ export default function AdminPanel() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
           {[
             { label: 'Total Users',  value: users.length,   color: 'bg-gray-700',    icon: Users  },
             { label: 'Admins',       value: adminCount,     color: 'bg-violet-600',  icon: Crown  },
-            { label: 'Employees',    value: employeeCount,  color: 'bg-blue-600',    icon: User   },
+            { label: 'Managers',     value: managerCount,   color: 'bg-blue-600',    icon: Shield },
+            { label: 'Agents',       value: agentCount,     color: 'bg-teal-600',    icon: User   },
+            { label: 'Employees',    value: employeeCount,  color: 'bg-gray-500',    icon: User   },
           ].map((stat, i) => (
             <motion.div key={stat.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.08 }}
@@ -321,7 +327,7 @@ export default function AdminPanel() {
             <AlertCircle className="w-5 h-5 text-violet-400 flex-shrink-0 mt-0.5" />
             <div>
               <p className="text-violet-300 text-sm font-medium mb-1">Role Permissions</p>
-              <div className="grid grid-cols-2 gap-4 mt-3">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-3">
                 <div>
                   <p className="text-violet-400 text-xs font-semibold mb-1 flex items-center gap-1.5">
                     <Crown className="w-3.5 h-3.5" /> Admin
@@ -335,6 +341,28 @@ export default function AdminPanel() {
                 </div>
                 <div>
                   <p className="text-blue-400 text-xs font-semibold mb-1 flex items-center gap-1.5">
+                    <Shield className="w-3.5 h-3.5" /> Manager
+                  </p>
+                  <ul className="text-gray-400 text-xs space-y-0.5">
+                    <li>• View and manage team data</li>
+                    <li>• Send campaigns & messages</li>
+                    <li>• Access mail hub & tasks</li>
+                    <li>• No user management access</li>
+                  </ul>
+                </div>
+                <div>
+                  <p className="text-teal-400 text-xs font-semibold mb-1 flex items-center gap-1.5">
+                    <User className="w-3.5 h-3.5" /> Agent
+                  </p>
+                  <ul className="text-gray-400 text-xs space-y-0.5">
+                    <li>• Manage their own contacts & deals</li>
+                    <li>• Send campaigns & messages</li>
+                    <li>• Access mail hub & tasks</li>
+                    <li>• No user management access</li>
+                  </ul>
+                </div>
+                <div>
+                  <p className="text-gray-400 text-xs font-semibold mb-1 flex items-center gap-1.5">
                     <User className="w-3.5 h-3.5" /> Employee
                   </p>
                   <ul className="text-gray-400 text-xs space-y-0.5">

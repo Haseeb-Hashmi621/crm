@@ -12,6 +12,8 @@ from app.models.user import User
 
 router = APIRouter()
 
+VALID_ROLES = {"admin", "manager", "agent", "employee"}
+
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
@@ -30,7 +32,7 @@ class CreateUserRequest(BaseModel):
     email: EmailStr
     password: str
     full_name: str
-    role: str = "employee"   # 'admin' | 'employee'
+    role: str = "employee"   # 'admin' | 'manager' | 'agent' | 'employee'
 
 
 class UpdateUserRequest(BaseModel):
@@ -58,8 +60,8 @@ def create_user(
     admin: User = Depends(require_admin),
 ):
     """Create a new user account (admin only)."""
-    if data.role not in ("admin", "employee"):
-        raise HTTPException(status_code=400, detail="Role must be 'admin' or 'employee'")
+    if data.role not in VALID_ROLES:
+        raise HTTPException(status_code=400, detail=f"Role must be one of: {sorted(VALID_ROLES)}")
 
     existing = db.query(User).filter(User.email == data.email).first()
     if existing:
@@ -101,8 +103,8 @@ def update_user(
                 detail="Cannot demote the only admin. Promote another user first."
             )
 
-    if data.role and data.role not in ("admin", "employee"):
-        raise HTTPException(status_code=400, detail="Role must be 'admin' or 'employee'")
+    if data.role and data.role not in VALID_ROLES:
+        raise HTTPException(status_code=400, detail=f"Role must be one of: {sorted(VALID_ROLES)}")
 
     if data.email:
         existing = db.query(User).filter(User.email == data.email, User.id != user_id).first()

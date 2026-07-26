@@ -1,3 +1,5 @@
+import re
+from urllib.parse import quote
 from sqlalchemy.orm import Session
 from app.models.campaign import Campaign, CampaignRecipient
 from app.models.contact import Contact
@@ -9,6 +11,21 @@ import uuid
 import resend
 
 resend.api_key = settings.RESEND_API_KEY
+
+URL_REGEX = re.compile(r'https?://[^\s<>"\')]+')
+
+
+def _wrap_links_for_tracking(body: str, campaign_id, recipient_id) -> str:
+    """Rewrites every http(s) URL in the email body into a tracking-redirect
+    link, so clicks can be attributed to this campaign/recipient before
+    forwarding to the real destination."""
+    def replace(match):
+        original_url = match.group(0)
+        return (
+            f"{settings.PUBLIC_BACKEND_URL}/campaigns/track/{campaign_id}/"
+            f"{recipient_id}/click?url={quote(original_url, safe='')}"
+        )
+    return URL_REGEX.sub(replace, body)
 
 
 def get_campaigns(db: Session, user_id: uuid.UUID) -> List[Campaign]:
@@ -67,11 +84,6 @@ def schedule_campaign(
     scheduled_at: datetime,
     contact_ids: Optional[List[uuid.UUID]] = None,
 ) -> dict:
-    """Marks a draft campaign to be auto-sent at scheduled_at by the background scheduler.
-
-    contact_ids, if provided, is persisted so the scheduler sends to exactly
-    those contacts instead of defaulting to everyone (previously this
-    selection was silently dropped)."""
     campaign = get_campaign(db, campaign_id, user_id)
     if not campaign:
         return {"error": "Campaign not found"}
@@ -95,7 +107,6 @@ def schedule_campaign(
 
 
 def cancel_schedule(db: Session, campaign_id: str, user_id: uuid.UUID) -> dict:
-    """Reverts a scheduled (not-yet-sent) campaign back to draft."""
     campaign = get_campaign(db, campaign_id, user_id)
     if not campaign:
         return {"error": "Campaign not found"}
@@ -157,10 +168,11 @@ def send_campaign(
         db.flush()
 
         pixel_url = f"{settings.PUBLIC_BACKEND_URL}/campaigns/track/{campaign.id}/{recipient.id}/open.gif"
+        tracked_body = _wrap_links_for_tracking(personalized_body, campaign.id, recipient.id)
 
         html_body = f"""
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            {personalized_body.replace(chr(10), '<br>')}
+            {tracked_body.replace(chr(10), '<br>')}
         </div>
         <img src="{pixel_url}" width="1" height="1" style="display:none;" alt="" />
         """
@@ -177,7 +189,7 @@ def send_campaign(
             recipient.sent_at = datetime.now(timezone.utc)
             sent_count += 1
 
-        except Exception as e:
+        except Exception:
             recipient.status = "failed"
             failed_count += 1
 

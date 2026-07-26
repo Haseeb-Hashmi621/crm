@@ -1056,21 +1056,6 @@ function WhatsappCampaigns() {
 
   return (
     <>
-      {/* Sandbox info banner */}
-      <div className="flex items-start gap-3 bg-green-500/10 border border-green-500/30 rounded-2xl p-4 mb-6">
-        <Info className="w-4 h-4 text-green-400 flex-shrink-0 mt-0.5" />
-        <div>
-          <p className="text-green-400 text-sm font-medium">WhatsApp Sandbox Active</p>
-          <p className="text-green-400/70 text-xs mt-0.5">
-            Each recipient must first join the sandbox by sending{' '}
-            <span className="font-mono bg-green-500/20 px-1.5 py-0.5 rounded text-green-300">join origin-biggest</span>
-            {' '}to{' '}
-            <span className="font-mono bg-green-500/20 px-1.5 py-0.5 rounded text-green-300">+1 415 523 8886</span>
-            {' '}on WhatsApp before they can receive messages.
-          </p>
-        </div>
-      </div>
-
       {/* Stat Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         {statCards.map((stat, i) => (

@@ -32,14 +32,27 @@ def get_deal(db: Session, deal_id: str, user_id: uuid.UUID) -> Optional[Deal]:
     return db.query(Deal).filter(Deal.id == deal_id, Deal.user_id == user_id).first()
 
 
-def _log_stage_change(db: Session, deal_id, user_id, from_stage: Optional[str], to_stage: str):
-    history = DealStageHistory(
-        deal_id=deal_id,
-        user_id=user_id,
-        from_stage=from_stage,
-        to_stage=to_stage,
-    )
-    db.add(history)
+def _auto_assign_owner(db: Session, user_id: uuid.UUID) -> Optional[str]:
+    """When a deal is created with no owner specified, assign it to whichever
+    team member (admin/manager/agent/employee) currently has the fewest deals
+    on this account, so new leads don't all silently pile onto one person.
+    Returns None (leaves the deal unassigned) if there are no team members yet."""
+    from app.models.user import User
+
+    team = db.query(User).order_by(User.created_at.asc()).all()
+    names = [u.full_name for u in team if u.full_name]
+    if not names:
+        return None
+
+    counts = {name: 0 for name in names}
+    existing_owners = db.query(Deal.owner).filter(
+        Deal.user_id == user_id, Deal.owner.isnot(None)
+    ).all()
+    for (owner_name,) in existing_owners:
+        if owner_name in counts:
+            counts[owner_name] += 1
+
+    return min(counts, key=counts.get)
 
 
 def create_deal(db: Session, deal_data: DealCreate, user_id: uuid.UUID) -> Deal:
@@ -51,6 +64,8 @@ def create_deal(db: Session, deal_data: DealCreate, user_id: uuid.UUID) -> Deal:
         if linked_contact:
             contact_name = f"{linked_contact.first_name or ''} {linked_contact.last_name or ''}".strip()
 
+    owner = deal_data.owner or _auto_assign_owner(db, user_id)
+
     db_deal = Deal(
         title=deal_data.title,
         value=deal_data.value,
@@ -58,7 +73,7 @@ def create_deal(db: Session, deal_data: DealCreate, user_id: uuid.UUID) -> Deal:
         contact_name=contact_name,
         contact_id=deal_data.contact_id,
         company=deal_data.company,
-        owner=deal_data.owner,
+        owner=owner,
         user_id=user_id
     )
     db.add(db_deal)
@@ -83,6 +98,16 @@ def create_deal(db: Session, deal_data: DealCreate, user_id: uuid.UUID) -> Deal:
     )
 
     return db_deal
+
+
+def _log_stage_change(db: Session, deal_id, user_id, from_stage: Optional[str], to_stage: str):
+    history = DealStageHistory(
+        deal_id=deal_id,
+        user_id=user_id,
+        from_stage=from_stage,
+        to_stage=to_stage,
+    )
+    db.add(history)
 
 
 def update_deal(db: Session, deal_id: str, deal_data: DealUpdate, user_id: uuid.UUID) -> Optional[Deal]:
