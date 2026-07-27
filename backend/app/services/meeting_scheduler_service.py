@@ -1,5 +1,7 @@
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from datetime import datetime, date, time, timedelta, timezone as dt_timezone
+from zoneinfo import ZoneInfo
 from typing import List, Optional
 import uuid
 import re
@@ -15,6 +17,14 @@ resend.api_key = settings.RESEND_API_KEY
 
 MIN_NOTICE_HOURS = 2
 MAX_BOOKING_WINDOW_DAYS = 30
+
+# Availability windows (weekly schedule + overrides) are stored as PKT
+# wall-clock time (e.g. 08:00-20:00 means 8am-8pm Pakistan time). They must
+# be localized to this zone before converting to UTC for any comparison
+# against bookings/calendar events, which are already stored correctly in
+# UTC. Previously these were mislabeled as UTC directly, which shifted
+# every displayed slot 5 hours later (PKT = UTC+5).
+HOST_TIMEZONE = ZoneInfo("Asia/Karachi")
 
 
 def _slugify(name: str) -> str:
@@ -148,7 +158,8 @@ def delete_override(db: Session, user_id: uuid.UUID, override_id: str) -> bool:
 # ── Slot computation ─────────────────────────────────────────────────────────
 
 def _day_window(db: Session, user_id: uuid.UUID, day: date, weekly_by_day: dict):
-    """Returns (start_time, end_time) or None if the day is unavailable."""
+    """Returns (start_time, end_time) as PKT wall-clock time objects,
+    or None if the day is unavailable."""
     override = db.query(AvailabilityOverride).filter(
         AvailabilityOverride.user_id == user_id, AvailabilityOverride.date == day
     ).first()
@@ -215,8 +226,10 @@ def compute_available_slots(
         window = _day_window(db, user_id, day, weekly_by_day)
         if window:
             start_t, end_t = window
-            cursor = datetime.combine(day, start_t, tzinfo=dt_timezone.utc)
-            day_end = datetime.combine(day, end_t, tzinfo=dt_timezone.utc)
+            # Localize the stored PKT wall-clock window to Asia/Karachi,
+            # then convert to UTC — bookings/events are compared in UTC.
+            cursor = datetime.combine(day, start_t, tzinfo=HOST_TIMEZONE).astimezone(dt_timezone.utc)
+            day_end = datetime.combine(day, end_t, tzinfo=HOST_TIMEZONE).astimezone(dt_timezone.utc)
             slots = []
             while cursor + duration <= day_end:
                 slot_end = cursor + duration
@@ -304,6 +317,14 @@ def create_public_booking(db: Session, user_id: uuid.UUID, data) -> dict:
     if start_time < now + timedelta(hours=MIN_NOTICE_HOURS):
         return {"error": "This time no longer allows enough advance notice. Please pick another slot."}
 
+    # Fast-path check — gives a friendly error in the common case. This is
+    # NOT the source of truth for correctness: two near-simultaneous
+    # requests can both pass this check before either commits. The
+    # `no_overlapping_confirmed_bookings` EXCLUDE constraint on the
+    # meeting_bookings table (added in migration f6a7b8c9d0e1) is what
+    # actually guarantees no double-booking; a violation of that raises
+    # IntegrityError, which we catch below and turn into the same friendly
+    # error instead of a 500.
     conflict = db.query(Booking).filter(
         Booking.user_id == user_id,
         Booking.status == "confirmed",
@@ -359,7 +380,17 @@ def create_public_booking(db: Session, user_id: uuid.UUID, data) -> dict:
         status="confirmed",
     )
     db.add(booking)
-    db.commit()
+
+    try:
+        db.commit()
+    except IntegrityError:
+        # The DB-level EXCLUDE constraint caught an overlap that slipped
+        # past the fast-path check above (a genuine race between two
+        # concurrent bookings). Roll back everything from this request
+        # (contact/event/task/booking) and report the same friendly error.
+        db.rollback()
+        return {"error": "This slot was just booked by someone else. Please choose another time."}
+
     db.refresh(booking)
 
     host = db.query(User).filter(User.id == user_id).first()
