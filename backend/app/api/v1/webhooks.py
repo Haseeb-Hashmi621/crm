@@ -3,9 +3,17 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models.contact import Contact
 from app.models.activity import Activity
+from app.models.user import User
 from app.services import chatbot_service, conversation_service, sentiment_service
+from typing import Optional
 
 router = APIRouter()
+
+# All inbound messages from numbers that are NOT already saved as a contact
+# (e.g. someone scanning Sir's WhatsApp QR code) get auto-created as a new
+# Contact under this account, so the conversation is never silently dropped.
+# IMPORTANT: set this to Sir's actual CRM login email.
+WEBHOOK_OWNER_EMAIL: Optional[str] = "test3@example.com"
 
 
 def _normalize_phone(phone: str) -> str:
@@ -50,6 +58,61 @@ def _find_contact_by_phone(db: Session, raw_phone: str):
     return None
 
 
+def _get_webhook_owner(db: Session) -> Optional[User]:
+    """Resolve which CRM user account should own contacts auto-created from
+    inbound messages sent by numbers not already in the CRM.
+
+    Priority:
+      1. WEBHOOK_OWNER_EMAIL if explicitly set and that user exists
+      2. First admin user in the system
+      3. First user in the system (last resort)
+    """
+    if WEBHOOK_OWNER_EMAIL:
+        user = db.query(User).filter(User.email == WEBHOOK_OWNER_EMAIL).first()
+        if user:
+            return user
+
+    admin = db.query(User).filter(User.role == "admin").order_by(User.created_at.asc()).first()
+    if admin:
+        return admin
+
+    return db.query(User).order_by(User.created_at.asc()).first()
+
+
+def _find_or_create_contact_from_webhook(db: Session, raw_phone: str) -> Optional[Contact]:
+    """Looks up a contact by phone across the CRM. If none exists, creates a
+    new one under the webhook owner account so the conversation is captured
+    instead of silently dropped (e.g. someone messaging in from a QR code
+    who isn't already a saved contact). No name is available from Twilio's
+    payload, so the contact is created with a placeholder name using the
+    last 4 digits of the number for easy identification — Sir can rename
+    it once he knows who it is."""
+    existing = _find_contact_by_phone(db, raw_phone)
+    if existing:
+        return existing
+
+    owner = _get_webhook_owner(db)
+    if not owner:
+        # No user account exists at all yet — nothing we can attach this to.
+        return None
+
+    normalized = _normalize_phone(raw_phone)
+    last_four = normalized[-4:] if len(normalized) >= 4 else normalized
+
+    contact = Contact(
+        first_name="Unknown",
+        last_name=f"Contact ({last_four})",
+        email=None,
+        phone=normalized,
+        company=None,
+        user_id=owner.id,
+    )
+    db.add(contact)
+    db.commit()
+    db.refresh(contact)
+    return contact
+
+
 def _try_analyze_sentiment(db: Session, activity: Activity) -> None:
     """
     Best-effort sentiment analysis for an inbound activity. Never raises —
@@ -71,7 +134,7 @@ async def twilio_sms_inbound(request: Request, db: Session = Depends(get_db)):
     if not from_number or not body:
         return Response(content="<Response/>", media_type="text/xml")
 
-    contact = _find_contact_by_phone(db, from_number)
+    contact = _find_or_create_contact_from_webhook(db, from_number)
 
     if contact:
         activity = Activity(
@@ -98,7 +161,7 @@ async def twilio_whatsapp_inbound(request: Request, db: Session = Depends(get_db
     if not from_number or not body:
         return Response(content="<Response/>", media_type="text/xml")
 
-    contact = _find_contact_by_phone(db, from_number)
+    contact = _find_or_create_contact_from_webhook(db, from_number)
 
     if contact:
         inbound_activity = Activity(
